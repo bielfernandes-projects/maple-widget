@@ -22,7 +22,7 @@ export type Quest = {
 };
 export type ExpRow = { level: number; toNext: number };
 export type Tip = {
-  kind: 'ap' | 'sp'; title: string; text: string;
+  kind: 'ap' | 'sp'; guide: string; title: string; text: string;
   levelMin?: number; levelMax?: number; sourceUrl: string;
 };
 export type ParsedGuide = {
