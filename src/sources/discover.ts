@@ -18,7 +18,11 @@ export function parseSitemap(xml: string): GuideRef[] {
 
 export async function discoverGuides(o: { sitemapUrl: string; dominios: string[]; fetchFn?: typeof fetch }): Promise<GuideRef[]> {
   if (!isAllowedUrl(o.sitemapUrl, o.dominios)) throw new Error('domínio não permitido');
-  const r = await (o.fetchFn ?? fetch)(o.sitemapUrl, { headers: { 'user-agent': USER_AGENT } });
+  const r = await (o.fetchFn ?? fetch)(o.sitemapUrl, { headers: { 'user-agent': USER_AGENT }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return parseSitemap(await r.text()).filter((g) => isAllowedUrl(g.url, o.dominios));
+  const xml = await r.text();
+  if (!xml.includes('<urlset')) throw new Error('sitemap inválido');
+  const refs = parseSitemap(xml).filter((g) => isAllowedUrl(g.url, o.dominios));
+  if (!refs.length) throw new Error('sitemap inválido');
+  return refs;
 }

@@ -11,40 +11,47 @@ export type SyncOpts = { sitemapUrl: string; dominios: string[]; cacheDir: strin
 export type SyncResult = { data: SourceData[]; descobertos: number; atualizados: number; offline: boolean };
 
 export async function syncAuto(o: SyncOpts): Promise<SyncResult> {
-  fs.mkdirSync(o.cacheDir, { recursive: true });
+  try { fs.mkdirSync(o.cacheDir, { recursive: true }); } catch { /* ignora */ }
   const indexFile = path.join(o.cacheDir, 'auto-index.json');
   let refs: GuideRef[];
   let offline = false;
   try {
     refs = await discoverGuides(o);
-    fs.writeFileSync(indexFile, JSON.stringify(refs));
+    try { fs.writeFileSync(indexFile, JSON.stringify(refs)); } catch { /* índice é best-effort */ }
   } catch {
     offline = true;
-    refs = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, 'utf8')) : [];
+    try {
+      const j = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+      refs = Array.isArray(j)
+        ? j.filter((e): e is GuideRef => !!e && typeof e === 'object' && typeof e.url === 'string' && typeof e.lastmod === 'string')
+        : [];
+    } catch { refs = []; }
   }
+  const manual = (Array.isArray(o.manual) ? o.manual : []).filter((u): u is string => typeof u === 'string' && u.trim() !== '');
   const porUrl = new Map(refs.map((r) => [r.url, r]));
-  const urls = [...new Set([...refs.map((r) => r.url), ...o.manual])];
+  const urls = [...new Set([...refs.map((r) => r.url), ...manual])];
   const data: SourceData[] = [];
   let atualizados = 0;
   let i = 0;
 
   const worker = async () => {
     for (;;) {
+      if (i >= urls.length) return;
       const url = urls[i++];
-      if (!url) return;
       try {
         const ref = porUrl.get(url);
         const cached = readCache(o.cacheDir, url);
         const velho = !!cached && (ref
-          ? cached.source.lastmod !== ref.lastmod
+          ? cached.source.lastmod !== ref.lastmod || (!ref.lastmod && Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS)
           : Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS);
         const precisa = !offline && (!cached || cached.source.status === 'erro' || velho);
         if (!precisa) {
           if (cached) data.push({ ...cached, source: { ...cached.source, auto: !!ref } });
           continue;
         }
-        data.push(await loadSource(url, { dominios: o.dominios, cacheDir: o.cacheDir, fetchFn: o.fetchFn, lastmod: ref?.lastmod, auto: !!ref }));
-        atualizados++;
+        const d = await loadSource(url, { dominios: o.dominios, cacheDir: o.cacheDir, fetchFn: o.fetchFn, lastmod: ref?.lastmod, auto: !!ref });
+        data.push(d);
+        if (d.source.status !== 'erro') atualizados++;
       } catch {
         // domínio recusado ou falha isolada: ignora só esta fonte
       }

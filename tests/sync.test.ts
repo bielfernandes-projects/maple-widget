@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { parseSitemap } from '../src/sources/discover';
 import { syncAuto } from '../src/sources/sync';
 import { Store } from '../src/store';
@@ -101,5 +102,77 @@ describe('Store', () => {
     expect(c.gamePath).toBe('x');
     expect(c.autoSync).toBe(true);
     expect(c.sitemapUrl).toBe('https://meowdb.com/msclassic/sitemap.xml');
+  });
+});
+
+describe('syncAuto robustez', () => {
+  const idx = (dir: string) => path.join(dir, 'auto-index.json');
+  const SMF = '<?xml version="1.0"?><urlset><url><loc>https://meowdb.com/msclassic/guides/g-a</loc><lastmod>1</lastmod></url></urlset>';
+  const off = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+  const fixed = (body: string) => (async (u: string) => new Response(u === SITEMAP ? body : GUIDE)) as unknown as typeof fetch;
+
+  it('(a) offline + índice corrompido não lança', async () => {
+    const dir = tmp(); fs.writeFileSync(idx(dir), 'not json');
+    const r = await run(dir, off);
+    expect(r.offline).toBe(true);
+    expect(r.data).toEqual([]);
+  });
+  it('(b) índice com formato inválido usa só entradas válidas', async () => {
+    for (const bad of ['{}', 'null', '[null, 1, {"url":5}]']) {
+      const dir = tmp(); fs.writeFileSync(idx(dir), bad);
+      const r = await run(dir, off);
+      expect(r.offline).toBe(true);
+      expect(r.data).toEqual([]);
+    }
+  });
+  it('(c) sitemap inválido (HTML/vazio) mantém cache e índice', async () => {
+    for (const body of ['<html><body>oops</body></html>', '']) {
+      const dir = tmp(); await run(dir, net({ a: '1', b: '1' }).f);
+      const antes = fs.readFileSync(idx(dir), 'utf8');
+      const r = await run(dir, fixed(body));
+      expect(r.offline).toBe(true);
+      expect(r.data.length).toBe(2);
+      expect(fs.readFileSync(idx(dir), 'utf8')).toBe(antes);
+    }
+  });
+  it('(d) manual com string vazia na frente processa as válidas', async () => {
+    const n = net({ a: '1', b: '1' });
+    const r = await run(tmp(), n.f, ['', 'https://meowdb.com/msclassic/guides/g-x', 'https://meowdb.com/msclassic/guides/g-y']);
+    expect(r.data.length).toBe(4);
+    expect(n.calls.length).toBe(5);
+  });
+  it('(e) falha ao gravar o índice não vira offline', async () => {
+    const dir = tmp(); fs.mkdirSync(idx(dir));
+    const r = await run(dir, net({ a: '1', b: '1' }).f);
+    expect(r.offline).toBe(false);
+    expect(r.data.length).toBe(2);
+  });
+  it('(f) sem lastmod: não rebaixa até passar 6h', async () => {
+    const dir = tmp();
+    const calls: string[] = [];
+    const f = (async (u: string) => { calls.push(u); return new Response(u === SITEMAP
+      ? SMF.replace('<lastmod>1</lastmod>', '') : GUIDE); }) as unknown as typeof fetch;
+    await run(dir, f);
+    expect(calls.length).toBe(2);
+    await run(dir, f);
+    expect(calls.length).toBe(3);
+    const file = path.join(dir, createHash('sha1').update('https://meowdb.com/msclassic/guides/g-a').digest('hex') + '.json');
+    const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+    d.source.fetchedAt = Date.now() - 7 * 3_600_000;
+    fs.writeFileSync(file, JSON.stringify(d));
+    await run(dir, f);
+    expect(calls.length).toBe(5);
+  });
+  it('(g) atualizados exclui cargas que falham', async () => {
+    const f = (async (u: string) => {
+      if (u.endsWith('g-b')) throw new Error('boom');
+      return new Response(u === SITEMAP ? SM('1', '1') : GUIDE);
+    }) as unknown as typeof fetch;
+    const r = await run(tmp(), f);
+    expect(r.atualizados).toBe(1);
+  });
+  it('(h) manual que não é array não lança', async () => {
+    const r = await syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: tmp(), manual: undefined as any, fetchFn: net({ a: '1', b: '1' }).f });
+    expect(r.data.length).toBe(2);
   });
 });

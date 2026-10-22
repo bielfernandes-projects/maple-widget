@@ -33,7 +33,7 @@ export async function loadSource(url: string, o: Opts): Promise<SourceData> {
   const dir = o.cacheDir;
   const file = cacheFile(dir, url);
   try {
-    const r = await (o.fetchFn ?? fetch)(url, { redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
+    const r = await (o.fetchFn ?? fetch)(url, { redirect: 'follow', headers: { 'user-agent': USER_AGENT }, signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     // Redirecionamento não pode levar o conteúdo para fora do allowlist.
     const finalUrl = r.url || url;
