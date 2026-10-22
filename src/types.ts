@@ -33,7 +33,7 @@ export type Source = {
   url: string; title: string; fetchedAt: number;
   status: 'ok' | 'erro' | 'vazio'; error?: string;
   counts: { maps: number; quests: number; expRows: number; tips: number };
-  lastmod?: string; auto?: boolean;
+  lastmod?: string; auto?: boolean; parserVersion?: number;
 };
 export type SourceData = ParsedGuide & { source: Source };
 export type Library = { maps: GrindMap[]; quests: Quest[]; expRows: ExpRow[]; tips: Tip[] };

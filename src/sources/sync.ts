@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { discoverGuides, type GuideRef } from './discover';
 import { loadSource, readCache } from './load';
+import { PARSER_VERSION } from './parser';
 import type { SourceData } from '../types';
 
 const MANUAL_TTL_MS = 6 * 3_600_000;
@@ -49,9 +50,9 @@ async function run(o: SyncOpts): Promise<SyncResult> {
         const ref = porUrl.get(url);
         const auto = !!ref || fixas.includes(url);
         const cached = readCache(o.cacheDir, url);
-        const velho = !!cached && (ref
+        const velho = !!cached && (cached.source.parserVersion !== PARSER_VERSION || (ref
           ? cached.source.lastmod !== ref.lastmod || (!ref.lastmod && Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS)
-          : Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS);
+          : Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS));
         const precisa = !offline && (!cached || cached.source.status === 'erro' || velho);
         if (!precisa) {
           if (cached) data.push({ ...cached, source: { ...cached.source, auto } });

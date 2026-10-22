@@ -240,3 +240,37 @@ describe('syncAuto fontes fixas', () => {
     }
   });
 });
+
+describe('PARSER_VERSION no cache', () => {
+  const stale = (dir: string) => {
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'auto-index.json')) {
+      const p = path.join(dir, f); const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+      j.source.parserVersion = 1; fs.writeFileSync(p, JSON.stringify(j));
+    }
+  };
+  it('cache de parser antigo é rebaixado uma vez online', async () => {
+    const dir = tmp(); const n = net({ a: '1', b: '1' });
+    await run(dir, n.f); stale(dir);
+    const r1 = await run(dir, n.f);
+    expect(r1.atualizados).toBe(2);
+    expect(n.calls.length).toBe(3 + 1 + 2);
+    const r2 = await run(dir, n.f);
+    expect(r2.atualizados).toBe(0);
+    expect(n.calls.length).toBe(3 + 1 + 2 + 1);
+  });
+  it('offline serve o cache antigo sem rebaixar', async () => {
+    const dir = tmp(); await run(dir, net({ a: '1', b: '1' }).f); stale(dir);
+    const off = net({ a: '1', b: '1', offline: true });
+    const r = await run(dir, off.f);
+    expect(r.offline).toBe(true);
+    expect(r.data.length).toBe(2);
+    expect(off.calls).toEqual([SITEMAP]);
+  });
+  it('cache atual não é rebaixado', async () => {
+    const dir = tmp(); const n = net({ a: '1', b: '1' });
+    await run(dir, n.f);
+    expect(readCache(dir, 'https://meowdb.com/msclassic/guides/g-a')?.source.parserVersion).toBe(3);
+    await run(dir, n.f);
+    expect(n.calls.length).toBe(4);
+  });
+});

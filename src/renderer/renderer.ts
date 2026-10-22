@@ -120,10 +120,10 @@ function tabBody(v: ViewModel): Kid[] {
     return [
       h('div', { class: 'row' }, h('div', { class: 't' },
         h('b', null, v.estado?.mapa ?? 'Mapa desconhecido'),
-        h('span', { class: 'm' }, best && v.veredito.pct !== null
+        h('div', { class: 'm' }, best && v.veredito.pct !== null
           ? `${Math.round(v.veredito.pct * 100)}% do ideal (${fmt(best.maxExpHr)}/h em ${best.name})`
           : 'Sem comparação disponível'),
-        h('span', { class: 'm' }, TETO))),
+        h('div', { class: 'm' }, TETO))),
       h('b', null, 'Melhores mapas para seu level'),
       ...(v.mapas.length ? v.mapas.map(mapRow) : [v.fontes.length ? empty('Nenhum mapa para este level nas fontes.') : emptyAdd('Nenhuma fonte carregada.')]),
     ];

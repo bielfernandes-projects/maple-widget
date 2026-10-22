@@ -22,9 +22,9 @@ button:hover { background: #2e3350; }
 .row .t { flex: 1; min-width: 0; } .row .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .m { color: var(--mut); font-size: 12px; }
 .warn { background: #3a2f10; color: #ffd98a; padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
-.card { margin: 8px 10px 0; padding: 8px 10px; background: #1f3a2a; border: 1px solid var(--verde); border-radius: 8px; animation: pulse 1s ease-in-out 3; }
+.card { margin: 8px 10px 0; padding: 8px 10px; background: #1f3a2a; border: 1px solid var(--verde); border-radius: 8px; animation: pulse 1s ease-in-out 3; max-height: 60%; overflow-y: auto; flex: none; }
 @keyframes pulse { 50% { box-shadow: 0 0 12px var(--verde); } }
-.card h4 { margin: 0 0 4px; } .card p { margin: 4px 0; white-space: pre-wrap; max-height: 110px; overflow: auto; }
+.card h4 { margin: 0 0 4px; } .card p { margin: 4px 0; white-space: pre-wrap; max-height: 64px; overflow: auto; }
 input[type=text] { width: 100%; background: #0e1017; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; }
 .foot { padding: 6px 10px; border-top: 1px solid var(--line); color: var(--mut); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .foot .opac { display: flex; align-items: center; gap: 6px; } .foot .keys { flex-basis: 100%; font-size: 11px; }

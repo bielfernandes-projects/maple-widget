@@ -10,6 +10,8 @@ const faixa = (s: string): [number, number] | undefined => {
   return m ? [+m[1], +m[2]] : undefined;
 };
 
+export const PARSER_VERSION = 3; // bump whenever parser output changes
+
 export function parseGuide(html: string, url: string): ParsedGuide {
   const $ = cheerio.load(html);
   const abs = (s?: string) => {
