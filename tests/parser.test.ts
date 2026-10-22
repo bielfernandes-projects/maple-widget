@@ -34,4 +34,50 @@ describe('parseGuide', () => {
     const g = parseGuide('<main><h1>x</h1><p>oi</p></main>', 'https://meowdb.com/a');
     expect([g.maps.length, g.quests.length, g.expRows.length, g.tips.length]).toEqual([0, 0, 0, 0]);
   });
+
+  const u = 'https://meowdb.com/a';
+  const gt = (rows: string) => '<main><table><tr><th>Map</th><th>Street</th><th>Mob</th><th>Max EXP/hr</th><th>Why</th></tr>' + rows + '</table></main>';
+  const gr = (n: string, e: string) => '<tr><td>' + n + '</td><td>s</td><td>Bub</td><td>' + e + '</td><td>w</td></tr>';
+  it('mapas so com faixa explicita no H2', () => {
+    expect(parseGuide('<main><h2>Party and loot picks</h2>' + gt(gr('A', '100')) + '</main>', u).maps).toHaveLength(0);
+    const m = parseGuide('<main><h2>Level 11-15</h2>' + gt(gr('A', '1,000')) + '</main>', u).maps;
+    expect([m.length, m[0].levelMin, m[0].levelMax, m[0].maxExpHr]).toEqual([1, 11, 15, 1000]);
+  });
+  it('H2 "Levels N-M" gera tip sp com faixa', () => {
+    const g = parseGuide('<main><h2>Levels 30-70: Fighter skill build and leveling</h2><p>Take Power Strike first.</p></main>', u);
+    expect(g.tips[0]).toMatchObject({ kind: 'sp', levelMin: 30, levelMax: 70 });
+  });
+  it('H2 com "build" solto nao gera tip', () => {
+    expect(parseGuide("<main><h2>Find Your Build's Best Training Map</h2><p>texto qualquer aqui</p></main>", u).tips).toHaveLength(0);
+  });
+  it('img malformada nao quebra', () => {
+    const h = '<main><table><tr><th>Quest</th><th>Lv</th><th>EXP</th><th>From</th></tr><tr><td><img src="http://">Q</td><td>1</td><td>2</td><td>N</td></tr></table></main>';
+    const q = parseGuide(h, u).quests;
+    expect(q).toHaveLength(1);
+    expect(q[0].iconUrl).toBeUndefined();
+  });
+  it('linhas vazias/zeradas sao ignoradas', () => {
+    const g = parseGuide('<main><h2>Level 1-5</h2>' + gt(gr('', '5') + gr('B', '0') + gr('C', '7')) +
+      '<table><tr><th>Quest</th><th>Lv</th><th>EXP</th></tr><tr><td></td><td>1</td><td>2</td></tr></table></main>', u);
+    expect(g.maps.map((m) => m.name)).toEqual(['C']);
+    expect(g.quests).toHaveLength(0);
+  });
+  it('exp duplicado por nivel aparece uma vez (primeiro vence)', () => {
+    const r = (a: number, b: number) => '<tr><td>' + a + '</td><td>' + b + '</td></tr>';
+    const h = '<main><table><tr><th>Level</th><th>EXP to next</th></tr>' + r(1, 15) + r(2, 20) + '</table><table><tr><th>Level</th><th>EXP to next</th></tr>' + r(2, 99) + '</table></main>';
+    expect(parseGuide(h, u).expRows).toEqual([{ level: 1, toNext: 15 }, { level: 2, toNext: 20 }]);
+  });
+  it('texto de tip truncado em 1500', () => {
+    const h = '<main><h2>Skill points</h2>' + '<p>' + 'x'.repeat(1000) + '</p>'.repeat(1) + '<p>' + 'y'.repeat(1000) + '</p></main>';
+    const x = parseGuide(h, u).tips[0].text;
+    expect(x.length).toBeLessThanOrEqual(1501);
+    expect(x.endsWith('…')).toBe(true);
+  });
+  it('fixtures: sem mapas 1-100 e exp unico', () => {
+    const m = parseGuide(load('best-grind-maps-every-level'), base + 'x').maps;
+    expect(m.some((x) => x.levelMin === 1 && x.levelMax === 100)).toBe(false);
+    expect(m.length).toBe(32);
+    const e = parseGuide(load('exp-table-level-1-to-100'), base + 'x').expRows;
+    expect(new Set(e.map((x) => x.level)).size).toBe(e.length);
+  });
 });

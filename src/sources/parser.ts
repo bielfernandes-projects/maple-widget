@@ -1,16 +1,20 @@
 import * as cheerio from 'cheerio';
 import type { ParsedGuide } from '../types';
 
-const TIP_RE = /ability points|skill points|\bAP\b|\bSP\b|\bbuild\b/i;
-const num = (s: string) => parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
-const faixa = (s: string): [number, number] => {
-  const m = s.match(/level\s*(\d+)\s*[-–]\s*(\d+)/i);
-  return m ? [+m[1], +m[2]] : [1, 100];
+const TIP_RE = /ability points|skill points|\bAP\b|\bSP\b|skill build|AP allocation|SP allocation/i;
+const RANGE_RE = /levels?\s*(\d+)\s*(?:[-–—~]|to)\s*(\d+)/i;
+const TIP_MAX = 1500;
+const num = (s: string) => parseInt((s.replace(/,/g, '').match(/\d+/) ?? ['0'])[0], 10);
+const faixa = (s: string): [number, number] | undefined => {
+  const m = s.match(RANGE_RE);
+  return m ? [+m[1], +m[2]] : undefined;
 };
 
 export function parseGuide(html: string, url: string): ParsedGuide {
   const $ = cheerio.load(html);
-  const abs = (s?: string) => (s ? new URL(s, url).toString() : undefined);
+  const abs = (s?: string) => {
+    try { return s ? new URL(s, url).toString() : undefined; } catch { return undefined; }
+  };
   const origin = new URL(url).origin;
   const out: ParsedGuide = {
     title: $('h1').first().text().trim() || $('title').text().trim(),
@@ -19,12 +23,13 @@ export function parseGuide(html: string, url: string): ParsedGuide {
   const root = $('main').length ? $('main').first() : $('body');
 
   let h2 = '';
-  let range: [number, number] = [1, 100];
+  let range: [number, number] | undefined;
+  let tipLen = 0;
   let tip: { title: string; lines: string[]; range?: [number, number] } | null = null;
   const flushTip = () => {
     if (tip && tip.lines.length) {
       out.tips.push({
-        kind: /skill points|\bSP\b/i.test(tip.title) ? 'sp' : 'ap',
+        kind: /skill|\bSP\b/i.test(tip.title) ? 'sp' : 'ap',
         guide: out.title, title: tip.title, text: tip.lines.join('\n'),
         levelMin: tip.range?.[0], levelMax: tip.range?.[1], sourceUrl: url,
       });
@@ -39,14 +44,18 @@ export function parseGuide(html: string, url: string): ParsedGuide {
       flushTip();
       h2 = node.text().trim();
       range = faixa(h2);
-      if (TIP_RE.test(h2)) tip = { title: h2, lines: [], range: /level\s*\d+/i.test(h2) ? range : undefined };
+      if (TIP_RE.test(h2)) { tip = { title: h2, lines: [], range }; tipLen = 0; }
       return;
     }
     if (tag === 'table') { parseTable(node); return; }
     if (!tip || node.closest('table').length) return;
     if (tag === 'li' && node.find('p').length) return; // evita duplicar texto de <li><p>
+    if (tipLen >= TIP_MAX) return;
     const t = node.text().trim();
-    if (t) tip.lines.push(t);
+    if (!t) return;
+    tip.lines.push(t);
+    tipLen += t.length + 1;
+    if (tipLen >= TIP_MAX) tip.lines = [tip.lines.join('\n').slice(0, TIP_MAX) + '…'];
   });
   flushTip();
   return out;
@@ -66,6 +75,7 @@ export function parseGuide(html: string, url: string): ParsedGuide {
       const txt = (i: number) => (i >= 0 ? (cells[i]?.text().trim() ?? '') : '');
 
       if (iMap >= 0 && iExpHr >= 0) {
+        if (!range || !txt(iMap) || !num(txt(iExpHr))) continue;
         const iMob = col((h) => h.includes('mob'));
         const mobCell = cells[iMob];
         const mobId = row.find('a[href]').toArray().map((a) => $(a).attr('href') ?? '')
@@ -80,6 +90,7 @@ export function parseGuide(html: string, url: string): ParsedGuide {
           why: txt(col((h) => h === 'why')), levelMin: range[0], levelMax: range[1], sourceUrl: url,
         });
       } else if (iQuest >= 0 && iLv >= 0 && iExp >= 0) {
+        if (!txt(iQuest)) continue;
         const id = row.find('a[href]').toArray().map((a) => $(a).attr('href') ?? '')
           .map((h) => h.match(/quest-tracker\/(\d+)/)?.[1]).find(Boolean);
         const reward = txt(col((h) => h === 'reward'));
@@ -90,7 +101,7 @@ export function parseGuide(html: string, url: string): ParsedGuide {
         });
       } else if (iLevel >= 0 && iNext >= 0) {
         const level = num(txt(iLevel)), toNext = num(txt(iNext));
-        if (level > 0 && toNext > 0) out.expRows.push({ level, toNext });
+        if (level > 0 && toNext > 0 && !out.expRows.some((r) => r.level === level)) out.expRows.push({ level, toNext });
       }
     }
   }
