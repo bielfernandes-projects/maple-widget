@@ -53,6 +53,8 @@ export type Config = {
   autoSync: boolean; sitemapUrl: string;
 };
 
+export type SyncInfo = { auto: boolean; guias: number; ultima: number; offline: boolean };
+
 export type ViewModel = {
   estado: Estado | null;
   veredito: Veredito;
@@ -66,4 +68,5 @@ export type ViewModel = {
   precisaWizard: boolean;
   opacidade: number;
   expandido: boolean;
+  sync: SyncInfo;
 };
