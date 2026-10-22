@@ -2136,6 +2136,17 @@ git add -A && git commit -m "feat: ui do widget (compacto/expandido, abas, cart�
 
 ### Task 13: Assistente de primeira execução (calibração)
 
+**Emenda (2026-10-22, achado do controle com a máquina real): detecção da janela do jogo.** O shell (Task 11) escolhe a janela a capturar pelo título com `/maplestory/i`. Na máquina do usuário a única janela que casa é o **Windows Terminal** da sessão de desenvolvimento ("◑ Widget flutuante para MapleStory"), e uma aba de navegador com "MapleStory" no título também casaria — falso positivo que o widget trataria como o jogo. Esta tarefa (que já é a de configuração) corrige isso:
+
+- `Config` ganha `janelaJogo: string` (padrão `''` = detectar automaticamente); `DEFAULT_CONFIG.janelaJogo = ''`.
+- Novo módulo puro `src/capture/window.ts` exportando `escolherJanela(nomes: string[], preferido?: string): string | undefined`:
+  1. se `preferido` (não vazio) estiver na lista (comparação exata), devolve-o;
+  2. senão, heurística: candidatos = nomes que **começam** com `maplestory` (sem diferenciar maiúsculas), que **não** contenham `|`, `—`, ` - ` nem os termos `chrome`, `edge`, `firefox`, `brave`, `opera`, `vivaldi`, `terminal`, `visual studio`, `widget`/`overlay` (a própria janela do widget, título `MW Overlay`, nunca é candidata); devolve o de **menor** comprimento (o título do jogo é curto), ou `undefined` se não houver candidatos.
+  Testes obrigatórios (`tests/window.test.ts`): o título `◑ Widget flutuante para MapleStory` NÃO casa; `MapleStory` e `MapleStory Classic World` casam; `MapleStory Classic World Wiki & Database | NiaMeowDB - Google Chrome` NÃO casa; entre `MapleStory Classic World` e `MapleStory` vence `MapleStory`; `preferido` exato vence a heurística mesmo se parecer navegador; `preferido` ausente da lista cai na heurística; lista vazia → `undefined`; entradas não-string/vazias ignoradas sem lançar.
+- `main.ts`: `captureGame()` obtém os nomes das janelas e usa `escolherJanela(nomes, cfg.janelaJogo)` em vez da regex.
+- Novo IPC `wiz:windows` → até 30 nomes de janelas (strings únicas, sem a do próprio widget); `wiz:save` aceita `janelaJogo` opcional (string ≤ 200, validada em `validate.ts` com teste) e a grava.
+- O assistente ganha um passo "Janela do jogo" antes da calibração: lista as janelas, pré-seleciona a que a heurística escolheria, permite escolher outra ou "Detectar automaticamente" (grava `''`). Todo texto da lista é renderizado só como texto.
+
 **Files:**
 - Modify: `src/renderer/wizard.ts` (substituir stub)
 - Modify: `src/renderer/styles.css` (acrescentar estilos do wizard)
