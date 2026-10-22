@@ -1353,52 +1353,14 @@ export async function discoverGuides(o: { sitemapUrl: string; dominios: string[]
 }
 ```
 
-- [ ] **Step 5: Ajustar `src/sources/load.ts`**
+- [ ] **Step 5: Ajustar `src/sources/load.ts` (MODIFICAR a versão atual; não reescrever do zero)**
 
-Substituir o arquivo por esta versão (mesmo comportamento da Task 7 + `lastmod`/`auto`/`User-Agent`/`readCache`):
-```ts
-import fs from 'node:fs';
-import path from 'node:path';
-import { createHash } from 'node:crypto';
-import { isAllowedUrl } from './allowlist';
-import { USER_AGENT } from './discover';
-import { parseGuide } from './parser';
-import type { ParsedGuide, SourceData } from '../types';
-
-type Opts = { dominios: string[]; cacheDir: string; fetchFn?: typeof fetch; lastmod?: string; auto?: boolean };
-const EMPTY: ParsedGuide = { title: '', maps: [], quests: [], expRows: [], tips: [] };
-
-const counts = (g: ParsedGuide) =>
-  ({ maps: g.maps.length, quests: g.quests.length, expRows: g.expRows.length, tips: g.tips.length });
-const cacheFile = (dir: string, url: string) => path.join(dir, createHash('sha1').update(url).digest('hex') + '.json');
-
-export function readCache(cacheDir: string, url: string): SourceData | undefined {
-  try { return JSON.parse(fs.readFileSync(cacheFile(cacheDir, url), 'utf8')); } catch { return undefined; }
-}
-
-export async function loadSource(url: string, o: Opts): Promise<SourceData> {
-  if (!isAllowedUrl(url, o.dominios)) throw new Error('domínio não permitido');
-  fs.mkdirSync(o.cacheDir, { recursive: true });
-  try {
-    const r = await (o.fetchFn ?? fetch)(url, { redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const g = parseGuide(await r.text(), url);
-    const c = counts(g);
-    const empty = !(c.maps || c.quests || c.expRows || c.tips);
-    const data: SourceData = {
-      ...g,
-      source: { url, title: g.title || url, fetchedAt: Date.now(), status: empty ? 'vazio' : 'ok', counts: c, lastmod: o.lastmod, auto: o.auto },
-    };
-    fs.writeFileSync(cacheFile(o.cacheDir, url), JSON.stringify(data));
-    return data;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const cached = readCache(o.cacheDir, url);
-    if (cached) return { ...cached, source: { ...cached.source, status: 'erro', error: msg } };
-    return { ...EMPTY, source: { url, title: url, fetchedAt: 0, status: 'erro', error: msg, counts: counts(EMPTY), lastmod: o.lastmod, auto: o.auto } };
-  }
-}
-```
+A versão atual (Task 7, já com as correções de segurança/robustez: checagem de `r.url` contra o allowlist após o fetch, leitura de cache à prova de JSON corrompido, escrita de cache que nunca derruba um download bem-sucedido, escrita atômica tmp+rename) deve ser **preservada**. Mudanças a aplicar:
+- `Opts` ganha `lastmod?: string; auto?: boolean`.
+- Exportar `readCache(cacheDir: string, url: string): SourceData | undefined` (a mesma leitura segura já usada no caminho de erro, com `try/catch` em volta de `JSON.parse`), e usá-la no `catch` de `loadSource`.
+- Acrescentar o header `'user-agent': USER_AGENT` (importado de `./discover`) na chamada `fetch`, mantendo `redirect: 'follow'` e a checagem `isAllowedUrl(r.url || url, ...)` existente.
+- Gravar `lastmod: o.lastmod, auto: o.auto` em `source` no caminho de sucesso e no caminho de erro sem cache.
+- Nenhuma outra mudança de comportamento; os testes de `tests/sources.test.ts` (incluindo os de redirecionamento, cache corrompido e falha de escrita adicionados na Task 7) devem continuar passando.
 
 - [ ] **Step 6: Implementar `src/sources/sync.ts`**
 
