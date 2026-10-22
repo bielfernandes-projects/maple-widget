@@ -11,6 +11,8 @@ export const DEFAULT_CONFIG: Config = {
   questsFeitas: [],
   opacidade: 0.92,
   janela: { expandido: false },
+  autoSync: true,
+  sitemapUrl: 'https://meowdb.com/msclassic/sitemap.xml',
 };
 
 export class Store {

@@ -3,9 +3,11 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { isAllowedUrl } from './allowlist';
 import { parseGuide } from './parser';
+import { USER_AGENT } from './discover';
 import type { ParsedGuide, SourceData } from '../types';
 
-type Opts = { dominios: string[]; cacheDir: string; fetchFn?: typeof fetch };
+type Opts = { dominios: string[]; cacheDir: string; fetchFn?: typeof fetch; lastmod?: string; auto?: boolean };
+const cacheFile = (dir: string, url: string) => path.join(dir, createHash('sha1').update(url).digest('hex') + '.json');
 const EMPTY: ParsedGuide = { title: '', maps: [], quests: [], expRows: [], tips: [] };
 
 const counts = (g: ParsedGuide) =>
@@ -22,16 +24,16 @@ function writeCache(dir: string, file: string, data: SourceData) {
 }
 
 // Cache ausente ou corrompido equivale a "sem cache".
-function readCache(file: string): SourceData | undefined {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return undefined; }
+export function readCache(cacheDir: string, url: string): SourceData | undefined {
+  try { return JSON.parse(fs.readFileSync(cacheFile(cacheDir, url), 'utf8')); } catch { return undefined; }
 }
 
 export async function loadSource(url: string, o: Opts): Promise<SourceData> {
   if (!isAllowedUrl(url, o.dominios)) throw new Error('domínio não permitido');
   const dir = o.cacheDir;
-  const file = path.join(dir, createHash('sha1').update(url).digest('hex') + '.json');
+  const file = cacheFile(dir, url);
   try {
-    const r = await (o.fetchFn ?? fetch)(url, { redirect: 'follow' });
+    const r = await (o.fetchFn ?? fetch)(url, { redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     // Redirecionamento não pode levar o conteúdo para fora do allowlist.
     const finalUrl = r.url || url;
@@ -39,13 +41,13 @@ export async function loadSource(url: string, o: Opts): Promise<SourceData> {
     const g = parseGuide(await r.text(), url);
     const c = counts(g);
     const empty = !(c.maps || c.quests || c.expRows || c.tips);
-    const data: SourceData = { ...g, source: { url, title: g.title || url, fetchedAt: Date.now(), status: empty ? 'vazio' : 'ok', counts: c } };
+    const data: SourceData = { ...g, source: { url, title: g.title || url, fetchedAt: Date.now(), status: empty ? 'vazio' : 'ok', counts: c, lastmod: o.lastmod, auto: o.auto } };
     writeCache(dir, file, data);
     return data;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const cached = readCache(file);
+    const cached = readCache(dir, url);
     if (cached) return { ...cached, source: { ...cached.source, status: 'erro', error: msg } };
-    return { ...EMPTY, source: { url, title: url, fetchedAt: 0, status: 'erro', error: msg, counts: counts(EMPTY) } };
+    return { ...EMPTY, source: { url, title: url, fetchedAt: 0, status: 'erro', error: msg, counts: counts(EMPTY), lastmod: o.lastmod, auto: o.auto } };
   }
 }

@@ -33,6 +33,7 @@ export type Source = {
   url: string; title: string; fetchedAt: number;
   status: 'ok' | 'erro' | 'vazio'; error?: string;
   counts: { maps: number; quests: number; expRows: number; tips: number };
+  lastmod?: string; auto?: boolean;
 };
 export type SourceData = ParsedGuide & { source: Source };
 export type Library = { maps: GrindMap[]; quests: Quest[]; expRows: ExpRow[]; tips: Tip[] };
@@ -49,6 +50,7 @@ export type Config = {
   questsFeitas: string[];
   opacidade: number;
   janela: { x?: number; y?: number; expandido: boolean };
+  autoSync: boolean; sitemapUrl: string;
 };
 
 export type ViewModel = {
