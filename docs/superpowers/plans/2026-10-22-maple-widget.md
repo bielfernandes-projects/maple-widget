@@ -2214,7 +2214,7 @@ git add -A && git commit -m "chore: empacotamento portable e checklist de valida
 
 ## Self-Review (feito contra a spec)
 
-- **Cobertura:** capture/OCR (T2–T3), tracker (T4), advisor (T5), parser (T6), allowlist/cache/config (T7), viewmodel e avisos (T8), janela/captura/IPC/hotkeys/click-through/opacidade/posição (T9), UI compacto/expandido/abas/level up/fontes (T10), assistente 3 passos (T11), empacotamento e validação dos modos (T12). Erros: cache offline (T7), OCR implausível (T4), captura preta (T8/T9), sem fontes (T8/T10).
+- **Cobertura:** capture/OCR (T2–T3), tracker (T4), advisor com dicas por classe (T5), parser (T6), allowlist/cache/config (T7), descoberta e sincronização automática de guias por sitemap/lastmod (T8), viewmodel e avisos (T9), janela/captura/IPC/hotkeys/click-through/opacidade/posição/timer de sync (T10), UI compacto/expandido/abas/level up/fontes+sync (T11), assistente 3 passos (T12), empacotamento e validação dos modos e da sync (T13). Erros: cache offline (T7/T8), OCR implausível (T4), captura preta (T9/T10), sem fontes (T9/T11).
 - **Desvios declarados** em *Global Constraints*: ícones sem cache próprio em disco; level up por subida do level lido.
 - **Consistência de tipos:** `Reading`, `Estado`, `ViewModel`, `Library`, `SourceData` definidos na T1 e usados com os mesmos nomes nas demais. `HudReader.read` retorna `Omit<Reading,'t'>` e o main acrescenta `t`.
 - **Riscos abertos (de propósito):** calibração fina das regiões e do predicado de cor do level (T3, passos 5–9); nome da janela do jogo para `desktopCapturer` (regex `/maple/i`, ajustar se o título real for diferente); comportamento em tela cheia exclusiva (T13).
