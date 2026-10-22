@@ -7,7 +7,7 @@ import type { SourceData } from '../types';
 const MANUAL_TTL_MS = 6 * 3_600_000;
 const CONCURRENCIA = 3;
 
-export type SyncOpts = { sitemapUrl: string; dominios: string[]; cacheDir: string; manual: string[]; fetchFn?: typeof fetch };
+export type SyncOpts = { sitemapUrl: string; dominios: string[]; cacheDir: string; manual: string[]; fixas?: string[]; fetchFn?: typeof fetch };
 export type SyncResult = { data: SourceData[]; descobertos: number; atualizados: number; offline: boolean };
 
 // Roda a cada 30 min no main: nunca pode rejeitar.
@@ -32,9 +32,11 @@ async function run(o: SyncOpts): Promise<SyncResult> {
         : [];
     } catch { refs = []; }
   }
-  const manual = (Array.isArray(o.manual) ? o.manual : []).filter((u): u is string => typeof u === 'string' && u.trim() !== '');
+  const limpa = (l: unknown) => (Array.isArray(l) ? l : []).filter((u): u is string => typeof u === 'string' && u.trim() !== '');
+  const manual = limpa(o.manual);
+  const fixas = limpa(o.fixas);
   const porUrl = new Map(refs.map((r) => [r.url, r]));
-  const urls = [...new Set([...refs.map((r) => r.url), ...manual])];
+  const urls = [...new Set([...refs.map((r) => r.url), ...fixas, ...manual])];
   const data: SourceData[] = [];
   let atualizados = 0;
   let i = 0;
@@ -45,16 +47,17 @@ async function run(o: SyncOpts): Promise<SyncResult> {
       const url = urls[i++];
       try {
         const ref = porUrl.get(url);
+        const auto = !!ref || fixas.includes(url);
         const cached = readCache(o.cacheDir, url);
         const velho = !!cached && (ref
           ? cached.source.lastmod !== ref.lastmod || (!ref.lastmod && Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS)
           : Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS);
         const precisa = !offline && (!cached || cached.source.status === 'erro' || velho);
         if (!precisa) {
-          if (cached) data.push({ ...cached, source: { ...cached.source, auto: !!ref } });
+          if (cached) data.push({ ...cached, source: { ...cached.source, auto } });
           continue;
         }
-        const d = await loadSource(url, { dominios: o.dominios, cacheDir: o.cacheDir, fetchFn: o.fetchFn, lastmod: ref?.lastmod, auto: !!ref });
+        const d = await loadSource(url, { dominios: o.dominios, cacheDir: o.cacheDir, fetchFn: o.fetchFn, lastmod: ref?.lastmod, auto });
         data.push(d);
         if (d.source.status !== 'erro') atualizados++;
       } catch {

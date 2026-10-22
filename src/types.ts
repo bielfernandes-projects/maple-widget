@@ -18,7 +18,7 @@ export type GrindMap = {
 };
 export type Quest = {
   id: string; name: string; npc: string; level: number; exp: number;
-  reward: string; iconUrl?: string; sourceUrl: string;
+  reward: string; area?: string; iconUrl?: string; sourceUrl: string;
 };
 export type ExpRow = { level: number; toNext: number };
 export type Tip = {
@@ -51,6 +51,7 @@ export type Config = {
   opacidade: number;
   janela: { x?: number; y?: number; expandido: boolean };
   autoSync: boolean; sitemapUrl: string;
+  fontesFixas: string[];
 };
 
 export type SyncInfo = { auto: boolean; guias: number; ultima: number; offline: boolean };

@@ -28,8 +28,8 @@ function net(state: { a: string; b: string; offline?: boolean }) {
   }) as unknown as typeof fetch;
   return { f, calls };
 }
-const run = (dir: string, f: typeof fetch, manual: string[] = []) =>
-  syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: dir, manual, fetchFn: f });
+const run = (dir: string, f: typeof fetch, manual: string[] = [], fixas?: string[]) =>
+  syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: dir, manual, fixas, fetchFn: f });
 
 describe('parseSitemap', () => {
   it('só guias, sem o índice nem outras entidades, preservando lastmod', () => {
@@ -207,5 +207,36 @@ describe('cache com formato inválido', () => {
     const r = await syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: null as any, manual: [], fetchFn: net({ a: '1', b: '1' }).f });
     expect(r.data).toEqual([]);
     expect(r.offline).toBe(true);
+  });
+});
+
+describe('syncAuto fontes fixas', () => {
+  const FIX = 'https://meowdb.com/msclassic/quest-tracker/all';
+  it('(a) fixa fora do sitemap: auto, não rebaixa, rebaixa após 6h', async () => {
+    const dir = tmp(); const n = net({ a: '1', b: '1' });
+    const r = await run(dir, n.f, [], [FIX]);
+    expect(r.data.find((d) => d.source.url === FIX)?.source.auto).toBe(true);
+    expect(n.calls.length).toBe(4);
+    const r2 = await run(dir, n.f, [], [FIX]);
+    expect(n.calls.length).toBe(5);
+    expect(r2.data.find((d) => d.source.url === FIX)?.source.auto).toBe(true);
+    const file = path.join(dir, createHash('sha1').update(FIX).digest('hex') + '.json');
+    const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+    d.source.fetchedAt = Date.now() - 7 * 3_600_000;
+    fs.writeFileSync(file, JSON.stringify(d));
+    await run(dir, n.f, [], [FIX]);
+    expect(n.calls.length).toBe(7);
+  });
+  it('(b) fixa que também está no sitemap não duplica', async () => {
+    const g = 'https://meowdb.com/msclassic/guides/g-a';
+    const r = await run(tmp(), net({ a: '1', b: '1' }).f, [], [g]);
+    expect(r.data.filter((d) => d.source.url === g).length).toBe(1);
+    expect(r.data.length).toBe(2);
+  });
+  it('(c) fixas inválidas são ignoradas', async () => {
+    for (const bad of [undefined, 42, ['', 5, null]] as any[]) {
+      const r = await run(tmp(), net({ a: '1', b: '1' }).f, [], bad);
+      expect(r.data.length).toBe(2);
+    }
   });
 });

@@ -7,6 +7,7 @@ export const DEFAULT_CONFIG: Config = {
   regions: {},
   sources: [],
   dominios: ['meowdb.com', 'niadb.com'],
+  fontesFixas: ['https://meowdb.com/msclassic/quest-tracker/all'],
   limiares: { verde: 0.7, amarelo: 0.4 },
   questsFeitas: [],
   opacidade: 0.92,

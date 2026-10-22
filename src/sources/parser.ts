@@ -66,7 +66,7 @@ export function parseGuide(html: string, url: string): ParsedGuide {
     const heads = $(rows[0]).children('th,td').toArray().map((c) => $(c).text().trim().toLowerCase());
     const col = (f: (h: string) => boolean) => heads.findIndex(f);
     const iMap = col((h) => h === 'map'), iExpHr = col((h) => h.startsWith('max exp'));
-    const iQuest = col((h) => h === 'quest'), iLv = col((h) => h === 'lv'), iExp = col((h) => h === 'exp');
+    const iQuest = col((h) => h === 'quest'), iLv = col((h) => h === 'lv' || h.startsWith('level')), iExp = col((h) => h === 'exp');
     const iLevel = col((h) => h === 'level'), iNext = col((h) => h === 'exp to next');
 
     for (const tr of rows.slice(1)) {
@@ -93,9 +93,14 @@ export function parseGuide(html: string, url: string): ParsedGuide {
         if (!txt(iQuest)) continue;
         const id = row.find('a[href]').toArray().map((a) => $(a).attr('href') ?? '')
           .map((h) => h.match(/quest-tracker\/(\d+)/)?.[1]).find(Boolean);
-        const reward = txt(col((h) => h === 'reward'));
+        const reward = txt(col((h) => h.startsWith('reward')));
+        const name = txt(iQuest).replace(/^\+\s*/, '').trim();
+        if (!name) continue;
+        const iNpc = heads.map((h) => h === 'from' || h === 'start npc').lastIndexOf(true);
+        const npc = txt(iNpc);
+        const area = txt(col((h) => h === 'area'));
         out.quests.push({
-          id: id ?? txt(iQuest), name: txt(iQuest), npc: txt(col((h) => h === 'from')),
+          id: id ?? `${name}|${npc}`, name, npc, area: area || undefined,
           level: num(txt(iLv)), exp: num(txt(iExp)), reward: reward === '-' ? '' : reward,
           iconUrl: abs(row.find('img').first().attr('src')), sourceUrl: url,
         });

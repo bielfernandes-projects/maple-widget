@@ -81,3 +81,35 @@ describe('parseGuide', () => {
     expect(new Set(e.map((x) => x.level)).size).toBe(e.length);
   });
 });
+
+describe('parseGuide — Quest Database', () => {
+  const url = 'https://meowdb.com/msclassic/quest-tracker/all';
+  const html = `<main><h1>Quest Database</h1><table>
+    <tr><th>Start NPC</th><th>Quest</th><th>Level ↑</th><th>Area</th><th>Start NPC</th><th>EXP</th><th>Mesos</th><th>Rewards</th></tr>
+    <tr><td></td><td>+ Bringing a Mirror to Heena</td><td>0</td><td>Maple Island</td><td>Sera</td><td>2</td><td>0</td><td>-</td></tr>
+    <tr><td></td><td>+ Mai's Training</td><td>13</td><td>Henesys</td><td>Mai</td><td>1,200</td><td>500</td><td>20x Egg</td></tr>
+    <tr><td></td><td>+ Mai's Training</td><td>13</td><td>Ellinia</td><td>Other Mai</td><td>7</td><td>0</td><td>-</td></tr>
+  </table></main>`;
+
+  it('lê quests da tabela do Quest Database', () => {
+    const g = parseGuide(html, url);
+    expect(g.quests.length).toBe(3);
+    expect(g.quests[0]).toMatchObject({ name: 'Bringing a Mirror to Heena', level: 0, area: 'Maple Island', npc: 'Sera', exp: 2, reward: '' });
+    expect(g.quests[1]).toMatchObject({ name: "Mai's Training", level: 13, area: 'Henesys', npc: 'Mai', exp: 1200, reward: '20x Egg' });
+  });
+  it('ids únicos mesmo sem link (nome + NPC)', () => {
+    const ids = parseGuide(html, url).quests.map((q) => q.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+  it('a tabela de EXP por level continua sendo reconhecida como EXP, não como quests', () => {
+    const g = parseGuide('<main><h1>t</h1><table><tr><th>Level</th><th>EXP to next</th></tr><tr><td>1</td><td>15</td></tr></table></main>', url);
+    expect([g.quests.length, g.expRows.length]).toEqual([0, 1]);
+  });
+  it('fixture real reduzida: >= 35 quests com nome limpo, level e EXP numéricos', () => {
+    const real = fs.readFileSync(path.join(__dirname, 'fixtures/guides/quest-database.html'), 'utf8');
+    const g = parseGuide(real, url);
+    expect(g.quests.length).toBeGreaterThanOrEqual(35);
+    expect(g.quests.every((q) => q.name && !q.name.startsWith('+') && Number.isFinite(q.level) && Number.isFinite(q.exp))).toBe(true);
+    expect(g.quests.some((q) => q.area)).toBe(true);
+  });
+});
