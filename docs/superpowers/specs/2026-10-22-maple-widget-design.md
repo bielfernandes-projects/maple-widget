@@ -68,6 +68,7 @@ Não reconhecido é ignorado e contado em `counts`. Nada reconhecido → status 
 - Offline: usa o índice e os guias em cache e avisa na UI.
 - Dicas de AP/SP vêm de guias de várias classes; cada `Tip` carrega o título do guia de origem e só aparece para a linhagem da classe lida da HUD (ex.: "Archer" ↔ guias "Bowman"); guias genéricos (sem classe no título) valem para todos.
 - Toggle "Sincronização automática" (ligada por padrão) na aba Fontes; desligada, só valem os links manuais.
+- **Quests:** os guias trazem só ~10 quests (Lv 1–5). A lista de quests por level vem do Quest Database (`https://meowdb.com/msclassic/quest-tracker/all`, tabela única com ~684 quests: nome, level, área, NPC, EXP, mesos, recompensas), uma "fonte fixa" (`Config.fontesFixas`) sincronizada junto com os guias, sem `lastmod` (reverificada por TTL de 6 h).
 
 ## UI
 
