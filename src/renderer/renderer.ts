@@ -30,6 +30,7 @@ let cardUntil = 0;
 let cardTimer: number | undefined;
 let wizardActive = false;
 let wizardDone = false;
+let fontesMsg = '';
 let dragging = false; // slider sendo arrastado: reconstruir o DOM mataria o arrasto
 let lastKey = '';
 const app = document.getElementById('app')!;
@@ -37,7 +38,7 @@ const app = document.getElementById('app')!;
 function runWizard() {
   wizardActive = true;
   try { startWizard(() => { wizardActive = false; wizardDone = true; lastKey = ''; render(); }); }
-  catch (e) { console.error('wizard', e); wizardActive = false; wizardDone = true; }
+  catch (e) { console.error('wizard', e); wizardActive = false; wizardDone = true; lastKey = ''; }
 }
 
 window.api.onVM((v) => {
@@ -73,7 +74,7 @@ function render() {
   if (vm.expandido) {
     if (showCard) kids.push(levelCard(cardData!));
     kids.push(h('div', { class: 'tabs nodrag', role: 'tablist' }, ...(['agora', 'quests', 'mapas', 'fontes'] as const).map((t) =>
-      h('button', { class: t === tab ? 'on' : '', role: 'tab', 'aria-selected': String(t === tab), onclick: () => { tab = t; render(); } }, t[0].toUpperCase() + t.slice(1)))));
+      h('button', { class: t === tab ? 'on' : '', role: 'tab', 'aria-selected': String(t === tab), onclick: () => { tab = t; fontesMsg = ''; render(); } }, t[0].toUpperCase() + t.slice(1)))));
     kids.push(h('div', { class: 'body nodrag' }, ...vm.avisos.map((a) => h('div', { class: 'warn' }, a)), ...tabBody(vm)));
     kids.push(footer(vm));
   }
@@ -135,15 +136,15 @@ function tabBody(v: ViewModel): Kid[] {
 
 function fontesTab(v: ViewModel): Kid[] {
   const input = h('input', { type: 'text', placeholder: 'Link extra (opcional) e Enter' });
-  const msg = h('div', { class: 'm' });
+  const msg = h('div', { class: 'm' }, fontesMsg);
   const add = async () => {
     const url = input.value.trim();
     if (!url) return;
+    fontesMsg = '';
     try {
       const r = await window.api.addSource(url);
-      msg.textContent = r.ok ? 'Adicionada.' : (r.erro ?? 'Erro.');
-      if (r.ok) input.value = '';
-    } catch (e) { msg.textContent = e instanceof Error ? e.message : 'Erro ao adicionar.'; }
+      fontesMsg = r.ok ? 'Adicionada.' : (r.erro ?? 'Erro ao adicionar a fonte.');
+    } catch { fontesMsg = 'Erro ao adicionar a fonte.'; }
     input.blur(); lastKey = ''; render();
   };
   input.addEventListener('keydown', (ev) => { if ((ev as KeyboardEvent).key === 'Enter') void add(); });
