@@ -35,7 +35,7 @@ describe('advisor', () => {
     expect(dicasPara(tips, 13, 'Archer').map((t) => t.guide)).toEqual(['Bowman Build Guide', 'Beginner Guide']);
     // sem classe lida não filtra por classe
     expect(dicasPara(tips, 13, undefined).map((t) => t.guide)).toEqual(['Bowman Build Guide', 'Warrior Build Guide', 'Beginner Guide']);
-    expect(dicasPara(tips, 45, 'Hunter').map((t) => t.guide)).toEqual(['Beginner Guide', 'Hunter Class Guide']);
+    expect(dicasPara(tips, 45, 'Hunter').map((t) => t.guide)).toEqual(['Hunter Class Guide', 'Beginner Guide']);
   });
   it('dicasPara nunca lança para classe lida (texto de OCR não confiável)', () => {
     const tips = [
@@ -56,6 +56,35 @@ describe('advisor', () => {
     expect(dicasPara(tips, 13, 'Archer').map((t) => t.guide)).toEqual(esperado);
     expect(dicasPara(tips, 13, ' Archer ').map((t) => t.guide)).toEqual(esperado);
     expect(dicasPara(tips, 13, 'ARCHER').map((t) => t.guide)).toEqual(esperado);
+  });
+  it('dicasPara ordena por relevância: faixa + linhagem, faixa, linhagem, genérico', () => {
+    const genericoSemFaixa = T('Beginner Guide', 'Ability Points');
+    const linhagemSemFaixa = T('Bowman Build Guide', 'Ability Points');
+    const genericoComFaixa = T('Beginner Guide', 'Ability Points', 1, 30);
+    const linhagemComFaixa = T('Bowman Build Guide', 'Ability Points', 1, 30);
+    const r = dicasPara([genericoSemFaixa, linhagemSemFaixa, genericoComFaixa, linhagemComFaixa], 13, 'Archer');
+    expect(r[0]).toBe(linhagemComFaixa);
+    expect(r[1]).toBe(genericoComFaixa);
+    expect(r[2]).toBe(linhagemSemFaixa);
+    expect(r[3]).toBe(genericoSemFaixa);
+  });
+  it('dicasPara é estável: empates mantêm a ordem de entrada', () => {
+    const a = T('Beginner Guide', 'first');
+    const b = T('Bowman Build Guide', 'x');
+    const c = T('Beginner Guide', 'second');
+    const r = dicasPara([a, b, c], 13, 'Archer');
+    expect(r.map((t) => t.title)).toEqual(['x', 'first', 'second']);
+  });
+  it('dicasPara sem classe lida: faixas primeiro, resto na ordem de entrada', () => {
+    const tips = [T('Beginner Guide', 'g1'), T('Bowman Build Guide', 'g2', 1, 30), T('Warrior Build Guide', 'g3'), T('Hunter Class Guide', 'g4', 1, 30)];
+    expect(dicasPara(tips, 13, undefined).map((t) => t.title)).toEqual(['g2', 'g4', 'g1', 'g3']);
+  });
+  it('dicasPara não muta o array de entrada', () => {
+    const tips = [T('Beginner Guide', 'g1'), T('Bowman Build Guide', 'g2', 1, 30), T('Bowman Build Guide', 'g3')];
+    const antes = [...tips];
+    dicasPara(tips, 13, 'Archer');
+    expect(tips).toEqual(antes);
+    tips.forEach((t, i) => expect(t).toBe(antes[i]));
   });
   it('novidadesNoLevel: o que começa exatamente neste level', () => {
     const n = novidadesNoLevel([M('a', 14, 18, 1), M('b', 11, 15, 1)], [Q('x', 14, 1), Q('y', 13, 1)], 14);

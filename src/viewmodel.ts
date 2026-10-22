@@ -16,7 +16,8 @@ export function buildViewModel(i: VMInput): ViewModel {
   if (i.capturaPreta) avisos.push('Captura preta: o jogo parece estar em tela cheia exclusiva. Use o modo janela/borderless ou mova o widget para o 2º monitor.');
   if (i.jogoNaoEncontrado) avisos.push('Janela do jogo não encontrada.');
   if (e?.semLeitura) avisos.push('Sem leitura da HUD agora (mantendo último valor).');
-  for (const f of i.fontes) if (f.status === 'erro') avisos.push(`Fonte com erro (usando cache): ${f.title}`);
+  const comErro = i.fontes.filter((f) => f.status === 'erro').length;
+  if (comErro) avisos.push(comErro === 1 ? '1 fonte com erro (usando cache)' : `${comErro} fontes com erro (usando cache)`);
 
   const dicas = e ? dicasPara(lib.tips, e.level, e.classe) : [];
   return {

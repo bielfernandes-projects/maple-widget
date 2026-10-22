@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildViewModel } from '../src/viewmodel';
-import type { Estado, Library } from '../src/types';
+import type { Estado, Library, Source } from '../src/types';
 
 const lib: Library = {
   maps: [{ name: 'Line 1', street: 's', maxExpHr: 1000, mob: { name: 'm' }, why: '', levelMin: 11, levelMax: 15, sourceUrl: 'u' },
@@ -35,6 +35,61 @@ describe('buildViewModel', () => {
     const a = buildViewModel({ ...base, estado: null, capturaPreta: true, jogoNaoEncontrado: true }).avisos.join('|');
     expect(a).toMatch(/fonte/i);
     expect(a).toMatch(/tela cheia/i);
-    expect(a).toMatch(/jogo/i);
+    expect(a).toMatch(/janela do jogo/i);
+  });
+  it('avisa quando a HUD está sem leitura', () => {
+    const vm = buildViewModel({ ...base, estado: est({ semLeitura: true }) });
+    expect(vm.avisos.join('|')).toMatch(/sem leitura/i);
+  });
+  it('agrega erros de fonte em uma linha (singular)', () => {
+    const vm = buildViewModel({ ...base, estado: est(), fontes: [F('A', 'erro')] });
+    const linhas = vm.avisos.filter((a) => /com erro/.test(a));
+    expect(linhas).toEqual(['1 fonte com erro (usando cache)']);
+  });
+  it('agrega erros de fonte em uma linha (plural)', () => {
+    const vm = buildViewModel({ ...base, estado: est(), fontes: [F('A', 'erro'), F('B', 'erro'), F('C', 'erro'), F('D', 'ok')] });
+    const linhas = vm.avisos.filter((a) => /com erro/.test(a));
+    expect(linhas).toEqual(['3 fontes com erro (usando cache)']);
+  });
+  it('estado null: veredito cinza e listas vazias', () => {
+    const vm = buildViewModel({ ...base, estado: null });
+    expect(vm.veredito.cor).toBe('cinza');
+    expect(vm.mapas).toEqual([]);
+    expect(vm.quests).toEqual([]);
+    expect(vm.dicas).toEqual([]);
+    expect(vm.levelUp).toBeUndefined();
+  });
+  it('biblioteca vazia com estado real: listas vazias sem lançar', () => {
+    const vazia: Library = { maps: [], quests: [], expRows: [], tips: [] };
+    const vm = buildViewModel({ ...base, lib: vazia, estado: est() });
+    expect(vm.mapas).toEqual([]);
+    expect(vm.quests).toEqual([]);
+    expect(vm.dicas).toEqual([]);
+    expect(vm.veredito.cor).toBe('cinza');
+  });
+  it('repassa precisaWizard, opacidade e expandido', () => {
+    const vm = buildViewModel({ ...base, estado: est(), precisaWizard: true, opacidade: 0.5, expandido: true });
+    expect(vm).toMatchObject({ precisaWizard: true, opacidade: 0.5, expandido: true });
+  });
+  it('saída sobrevive a structuredClone e não expõe o Set de feitas', () => {
+    const vm = buildViewModel({ ...base, estado: est({ level: 14, upou: true }), feitas: new Set(['1']) });
+    expect(() => structuredClone(vm)).not.toThrow();
+    expect(vm).not.toHaveProperty('feitas');
+    expect(Object.values(vm).some((v) => v instanceof Set)).toBe(false);
+  });
+  it('levelUp: dica de linhagem + faixa vem antes da genérica', () => {
+    const lib2: Library = {
+      ...lib,
+      tips: [
+        { kind: 'ap', guide: 'Beginner Guide', title: 'Ability Points', text: 'g', sourceUrl: 'u' },
+        { kind: 'ap', guide: 'Bowman Build Guide', title: 'Ability Points', text: 'c', levelMin: 11, levelMax: 15, sourceUrl: 'u' },
+      ],
+    };
+    const vm = buildViewModel({ ...base, lib: lib2, estado: est({ level: 14, upou: true, classe: 'Archer' }) });
+    expect(vm.levelUp!.dicas[0].guide).toBe('Bowman Build Guide');
   });
 });
+
+function F(title: string, status: 'ok' | 'erro'): Source {
+  return { url: 'u', title, fetchedAt: 0, status, counts: { maps: 0, quests: 0, expRows: 0, tips: 0 } };
+}

@@ -22,10 +22,18 @@ export function questsParaLevel(quests: Quest[], level: number, feitas: Set<stri
 
 export function dicasPara(tips: Tip[], level: number, classe?: string): Tip[] {
   const c = classe?.trim().toLowerCase() || undefined; // classe vem de OCR: vazia ou só espaços = sem filtro
-  return tips.filter((t) => {
-    const faixa = (t.levelMin === undefined || level >= t.levelMin) && (t.levelMax === undefined || level <= t.levelMax);
-    return faixa && (!c || classeCompativel(`${t.guide} ${t.title}`, c)); // sem classe lida, não filtra por classe
-  });
+  // relevância: 0 faixa+linhagem, 1 faixa, 2 linhagem, 3 genérico (sort é estável: empates mantêm a ordem)
+  const relevancia = (t: Tip) => {
+    const citaClasse = c !== undefined && citaLinhagem(`${t.guide} ${t.title}`, c);
+    if (t.levelMin !== undefined) return citaClasse ? 0 : 1;
+    return citaClasse ? 2 : 3;
+  };
+  return tips
+    .filter((t) => {
+      const faixa = (t.levelMin === undefined || level >= t.levelMin) && (t.levelMax === undefined || level <= t.levelMax);
+      return faixa && (!c || classeCompativel(`${t.guide} ${t.title}`, c)); // sem classe lida, não filtra por classe
+    })
+    .sort((a, b) => relevancia(a) - relevancia(b));
 }
 // Guia que cita a linhagem da classe lida passa; guia que não cita nenhuma classe conhecida (genérico) também passa.
 // ponytail: tabela de linhagem escrita à mão (nomes de job da HUD x títulos dos guias); completar se aparecerem jobs não mapeados.
@@ -37,11 +45,13 @@ const LINHAGEM: Record<string, string[]> = {
 };
 const escapa = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const cita = (texto: string, k: string) => new RegExp(`\\b${escapa(k)}\\b`).test(texto);
-function classeCompativel(guia: string, classe: string): boolean {
-  const g = guia.toLowerCase();
+function citaLinhagem(guia: string, classe: string): boolean {
   const chaves = Object.hasOwn(LINHAGEM, classe) ? LINHAGEM[classe] : [classe];
-  if (chaves.some((k) => cita(g, k))) return true;
-  return !CLASSES.some((k) => cita(g, k));
+  return chaves.some((k) => cita(guia.toLowerCase(), k));
+}
+function classeCompativel(guia: string, classe: string): boolean {
+  if (citaLinhagem(guia, classe)) return true;
+  return !CLASSES.some((k) => cita(guia.toLowerCase(), k));
 }
 
 export function novidadesNoLevel(maps: GrindMap[], quests: Quest[], level: number) {
