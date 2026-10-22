@@ -20,6 +20,7 @@
 - Pasta do jogo sugerida: `C:\Nexon\Library\maplestorycw`; screenshots em `appdata\Maple_A_*.jpg`.
 - Regiões da HUD são **normalizadas (0..1)** e salvas por resolução `"{w}x{h}"`.
 - Veredito: verde ≥ 0.70, amarelo ≥ 0.40, senão vermelho (configurável); cinza se sem dados.
+- Guias: sincronização **automática** pelo sitemap `https://meowdb.com/msclassic/sitemap.xml` (guia = URL `/msclassic/guides/<slug>`); só baixa guia novo ou com `lastmod` diferente; no máximo 3 downloads simultâneos; sincroniza na abertura e a cada 30 min; `User-Agent` identificado; links colados à mão continuam suportados como extras.
 - Desvios conscientes da spec (YAGNI): ícones são carregados direto da URL (cache HTTP do Chromium, sem cache próprio em disco); level up é detectado pela subida do level lido (sem região de banner).
 
 ## Estrutura de arquivos
@@ -36,6 +37,8 @@ src/advisor.ts                       # puro: mapas, quests, dicas, veredito, exp
 src/sources/parser.ts                # HTML do guia -> ParsedGuide
 src/sources/allowlist.ts             # isAllowedUrl
 src/sources/load.ts                  # download + cache + parse -> SourceData
+src/sources/discover.ts              # sitemap -> lista de guias (GuideRef)
+src/sources/sync.ts                  # sincronização automática incremental (por lastmod)
 src/store.ts                         # config.json
 src/viewmodel.ts                     # monta ViewModel (puro)
 src/main/main.ts                     # janela, loop de captura, IPC, hotkeys
@@ -687,6 +690,7 @@ git add -A && git commit -m "feat: tracker com EXP/h, level up e descarte de lei
 
 **Files:**
 - Create: `src/advisor.ts`, `tests/advisor.test.ts`
+- Modify: `src/types.ts` (o tipo `Tip` ganha `guide: string`, o título do guia de origem; as dicas passam a ser filtradas pela classe do guia)
 
 **Interfaces:**
 - Consumes: `GrindMap`, `Quest`, `Tip`, `ExpRow`, `Limiares`, `Veredito`.
@@ -710,8 +714,8 @@ const M = (name: string, a: number, b: number, exp: number): GrindMap =>
   ({ name, street: '', maxExpHr: exp, mob: { name: 'x' }, why: '', levelMin: a, levelMax: b, sourceUrl: 'u' });
 const Q = (id: string, level: number, exp: number): Quest =>
   ({ id, name: id, npc: '', level, exp, reward: '', sourceUrl: 'u' });
-const T = (title: string, a?: number, b?: number): Tip =>
-  ({ kind: 'ap', title, text: 't', levelMin: a, levelMax: b, sourceUrl: 'u' });
+const T = (guide: string, title: string, a?: number, b?: number): Tip =>
+  ({ kind: 'ap', guide, title, text: 't', levelMin: a, levelMax: b, sourceUrl: 'u' });
 const LIM = { verde: 0.7, amarelo: 0.4 };
 
 describe('advisor', () => {
@@ -728,10 +732,18 @@ describe('advisor', () => {
     const r = questsParaLevel([Q('a', 12, 50), Q('b', 13, 90), Q('c', 5, 999), Q('d', 14, 999), Q('e', 10, 10)], 13, new Set(['e']));
     expect(r.map((q) => q.id)).toEqual(['b', 'a']);
   });
-  it('dicasPara filtra por faixa de level e classe no título', () => {
-    const tips = [T('AP Archer', 1, 30), T('AP Warrior'), T('AP Archer late', 40, 70)];
-    expect(dicasPara(tips, 13, 'Archer').map((t) => t.title)).toEqual(['AP Archer']);
-    expect(dicasPara(tips, 13, undefined).map((t) => t.title)).toEqual(['AP Archer', 'AP Warrior']);
+  it('dicasPara filtra por faixa de level e pela linhagem de classe do guia', () => {
+    const tips = [
+      T('Bowman Build Guide', 'Ability Points', 1, 30),
+      T('Warrior Build Guide', 'Ability Points'),
+      T('Beginner Guide', 'Ability Points allocation'),
+      T('Hunter Class Guide', 'Ability Points', 40, 70),
+    ];
+    // HUD diz "Archer": guias Bowman e genéricos passam; Warrior não; Hunter está fora da faixa
+    expect(dicasPara(tips, 13, 'Archer').map((t) => t.guide)).toEqual(['Bowman Build Guide', 'Beginner Guide']);
+    // sem classe lida não filtra por classe
+    expect(dicasPara(tips, 13, undefined).map((t) => t.guide)).toEqual(['Bowman Build Guide', 'Warrior Build Guide', 'Beginner Guide']);
+    expect(dicasPara(tips, 45, 'Hunter').map((t) => t.guide)).toEqual(['Beginner Guide', 'Hunter Class Guide']);
   });
   it('novidadesNoLevel: o que começa exatamente neste level', () => {
     const n = novidadesNoLevel([M('a', 14, 18, 1), M('b', 11, 15, 1)], [Q('x', 14, 1), Q('y', 13, 1)], 14);
@@ -782,15 +794,22 @@ export function dicasPara(tips: Tip[], level: number, classe?: string): Tip[] {
   const c = classe?.toLowerCase();
   return tips.filter((t) => {
     const faixa = (t.levelMin === undefined || level >= t.levelMin) && (t.levelMax === undefined || level <= t.levelMax);
-    return faixa && (!c || classeCompativel(t.title, c)); // sem classe lida, não filtra por classe
+    return faixa && (!c || classeCompativel(`${t.guide} ${t.title}`, c)); // sem classe lida, não filtra por classe
   });
 }
-// título que cita a classe lida passa; título que não cita nenhuma classe conhecida também passa
-const CLASSES = ['warrior', 'magician', 'bowman', 'thief', 'archer', 'fighter', 'spearman', 'page', 'wizard', 'cleric', 'hunter', 'crossbowman', 'assassin', 'bandit', 'beginner'];
-function classeCompativel(title: string, classe: string): boolean {
-  const t = title.toLowerCase();
-  if (t.includes(classe)) return true;
-  return !CLASSES.some((k) => t.includes(k));
+// Guia que cita a linhagem da classe lida passa; guia que não cita nenhuma classe conhecida (genérico) também passa.
+// ponytail: tabela de linhagem escrita à mão (nomes de job da HUD x títulos dos guias); completar se aparecerem jobs não mapeados.
+const CLASSES = ['warrior', 'magician', 'bowman', 'thief', 'archer', 'fighter', 'spearman', 'page', 'wizard', 'cleric', 'hunter', 'crossbowman', 'assassin', 'bandit', 'mage'];
+const LINHAGEM: Record<string, string[]> = {
+  archer: ['archer', 'bowman'], bowman: ['bowman', 'archer'], hunter: ['hunter', 'bowman'], crossbowman: ['crossbowman', 'bowman'],
+  fighter: ['fighter', 'warrior'], spearman: ['spearman', 'warrior'], page: ['page', 'warrior'],
+  assassin: ['assassin', 'thief'], bandit: ['bandit', 'thief'], cleric: ['cleric', 'magician'],
+};
+const cita = (texto: string, k: string) => new RegExp(`\\b${k}\\b`).test(texto);
+function classeCompativel(guia: string, classe: string): boolean {
+  const g = guia.toLowerCase();
+  if ((LINHAGEM[classe] ?? [classe]).some((k) => cita(g, k))) return true;
+  return !CLASSES.some((k) => cita(g, k));
 }
 
 export function novidadesNoLevel(maps: GrindMap[], quests: Quest[], level: number) {
@@ -875,6 +894,7 @@ describe('parseGuide', () => {
     expect(sera).toMatchObject({ id: '1000', npc: 'Heena', level: 1, exp: 2 });
     const ap = g.tips.find((t) => /ability points/i.test(t.title))!;
     expect(ap.kind).toBe('ap');
+    expect(ap.guide).toMatch(/Beginner/);
     expect(ap.text.length).toBeGreaterThan(20);
   });
   it('HTML sem tabelas reconhecidas retorna tudo vazio', () => {
@@ -918,7 +938,7 @@ export function parseGuide(html: string, url: string): ParsedGuide {
     if (tip && tip.lines.length) {
       out.tips.push({
         kind: /skill points|\bSP\b/i.test(tip.title) ? 'sp' : 'ap',
-        title: tip.title, text: tip.lines.join('\n'),
+        guide: out.title, title: tip.title, text: tip.lines.join('\n'),
         levelMin: tip.range?.[0], levelMax: tip.range?.[1], sourceUrl: url,
       });
     }
@@ -1180,15 +1200,290 @@ git add -A && git commit -m "feat: allowlist, carga de fontes com cache e config
 
 ---
 
-### Task 8: ViewModel (puro)
+### Task 8: Descoberta e sincronização automática de guias
+
+**Files:**
+- Create: `src/sources/discover.ts`, `src/sources/sync.ts`, `tests/sync.test.ts`
+- Modify: `src/types.ts` (`Source` ganha `lastmod?: string; auto?: boolean`; `Config` ganha `autoSync: boolean; sitemapUrl: string`), `src/store.ts` (defaults `autoSync: true`, `sitemapUrl: 'https://meowdb.com/msclassic/sitemap.xml'`), `src/sources/load.ts` (opções `lastmod`/`auto`, `User-Agent`, exporta `readCache`)
+
+**Interfaces:**
+- Consumes: `loadSource`, `isAllowedUrl`, `SourceData`, `Source` (Task 7).
+- Produces:
+  - `type GuideRef = { url: string; lastmod: string }`
+  - `USER_AGENT: string`
+  - `parseSitemap(xml: string): GuideRef[]` (só URLs `/msclassic/guides/<slug>`, sem a página de índice)
+  - `discoverGuides(o: { sitemapUrl: string; dominios: string[]; fetchFn?: typeof fetch }): Promise<GuideRef[]>`
+  - `readCache(cacheDir: string, url: string): SourceData | undefined`
+  - `syncAuto(o: { sitemapUrl: string; dominios: string[]; cacheDir: string; manual: string[]; fetchFn?: typeof fetch }): Promise<{ data: SourceData[]; descobertos: number; atualizados: number; offline: boolean }>`
+
+- [ ] **Step 1: Testes que falham**
+
+`tests/sync.test.ts`:
+```ts
+import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { parseSitemap } from '../src/sources/discover';
+import { syncAuto } from '../src/sources/sync';
+
+const SITEMAP = 'https://meowdb.com/msclassic/sitemap.xml';
+const D = ['meowdb.com'];
+const SM = (a: string, b: string) => `<?xml version="1.0"?><urlset>
+<url><loc>https://meowdb.com/msclassic/guides</loc><lastmod>2026-10-01T00:00:00.000Z</lastmod></url>
+<url><loc>https://meowdb.com/msclassic/guides/g-a</loc><lastmod>${a}</lastmod></url>
+<url><loc>https://meowdb.com/msclassic/guides/g-b</loc><lastmod>${b}</lastmod></url>
+<url><loc>https://meowdb.com/msclassic/monsters/123</loc><lastmod>2026-10-01T00:00:00.000Z</lastmod></url>
+</urlset>`;
+const GUIDE = '<main><h1>G</h1><table><tr><th>Level</th><th>EXP to next</th></tr><tr><td>1</td><td>15</td></tr></table></main>';
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mw-sync-'));
+
+function net(state: { a: string; b: string; offline?: boolean }) {
+  const calls: string[] = [];
+  const f = (async (u: string) => {
+    calls.push(u);
+    if (state.offline) throw new Error('offline');
+    return new Response(u === SITEMAP ? SM(state.a, state.b) : GUIDE);
+  }) as unknown as typeof fetch;
+  return { f, calls };
+}
+const run = (dir: string, f: typeof fetch, manual: string[] = []) =>
+  syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: dir, manual, fetchFn: f });
+
+describe('parseSitemap', () => {
+  it('só guias, sem o índice nem outras entidades, preservando lastmod', () => {
+    expect(parseSitemap(SM('x', 'y'))).toEqual([
+      { url: 'https://meowdb.com/msclassic/guides/g-a', lastmod: 'x' },
+      { url: 'https://meowdb.com/msclassic/guides/g-b', lastmod: 'y' },
+    ]);
+  });
+});
+
+describe('syncAuto', () => {
+  it('primeira sync: sitemap + todos os guias, marcados como automáticos', async () => {
+    const n = net({ a: '1', b: '1' });
+    const r = await run(tmp(), n.f);
+    expect(r.data.length).toBe(2);
+    expect(r.data.every((d) => d.source.auto)).toBe(true);
+    expect(r.descobertos).toBe(2);
+    expect(r.atualizados).toBe(2);
+    expect(r.offline).toBe(false);
+    expect(n.calls.length).toBe(3);
+  });
+  it('segunda sync sem mudanças só baixa o sitemap', async () => {
+    const dir = tmp(); const n = net({ a: '1', b: '1' });
+    await run(dir, n.f);
+    const r = await run(dir, n.f);
+    expect(n.calls.length).toBe(4);
+    expect(r.atualizados).toBe(0);
+    expect(r.data.length).toBe(2);
+  });
+  it('guia com lastmod novo é rebaixado; os outros não', async () => {
+    const dir = tmp(); const state = { a: '1', b: '1' }; const n = net(state);
+    await run(dir, n.f);
+    state.b = '2';
+    const r = await run(dir, n.f);
+    expect(r.atualizados).toBe(1);
+    expect(n.calls.length).toBe(3 + 2); // sitemap + 1 guia
+  });
+  it('guia novo no site entra na próxima sync', async () => {
+    const dir = tmp(); const state = { a: '1', b: '1' };
+    await run(dir, net(state).f);
+    const f = (async (u: string) => new Response(u === SITEMAP
+      ? SM('1', '1').replace('</urlset>', '<url><loc>https://meowdb.com/msclassic/guides/g-c</loc><lastmod>3</lastmod></url></urlset>')
+      : GUIDE)) as unknown as typeof fetch;
+    const r = await run(dir, f);
+    expect(r.data.map((d) => d.source.url).sort()).toEqual([
+      'https://meowdb.com/msclassic/guides/g-a', 'https://meowdb.com/msclassic/guides/g-b', 'https://meowdb.com/msclassic/guides/g-c']);
+  });
+  it('offline usa o cache e sinaliza', async () => {
+    const dir = tmp(); const state = { a: '1', b: '1', offline: false };
+    await run(dir, net(state).f);
+    state.offline = true;
+    const r = await run(dir, net(state).f);
+    expect(r.offline).toBe(true);
+    expect(r.data.length).toBe(2);
+  });
+  it('fonte manual fora do sitemap entra sem flag auto; domínio proibido é ignorado', async () => {
+    const r = await run(tmp(), net({ a: '1', b: '1' }).f,
+      ['https://meowdb.com/msclassic/guides/g-extra', 'https://evil.com/x']);
+    const extra = r.data.find((d) => d.source.url.endsWith('g-extra'))!;
+    expect(extra.source.auto).toBe(false);
+    expect(r.data.some((d) => d.source.url.includes('evil.com'))).toBe(false);
+    expect(r.data.length).toBe(3);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar e ver falhar**
+
+Run: `npx vitest run tests/sync.test.ts` → FAIL (módulos não existem).
+
+- [ ] **Step 3: Atualizar tipos e config**
+
+Em `src/types.ts`: no tipo `Source`, acrescentar `lastmod?: string; auto?: boolean;`; no tipo `Config`, acrescentar `autoSync: boolean; sitemapUrl: string;`.  
+Em `src/store.ts`, em `DEFAULT_CONFIG`, acrescentar `autoSync: true,` e `sitemapUrl: 'https://meowdb.com/msclassic/sitemap.xml',`.
+
+- [ ] **Step 4: Implementar `src/sources/discover.ts`**
+
+```ts
+import { isAllowedUrl } from './allowlist';
+
+export type GuideRef = { url: string; lastmod: string };
+export const USER_AGENT = 'maple-widget/0.1 (ferramenta pessoal; sincroniza guias do MapleStory Classic)';
+
+export function parseSitemap(xml: string): GuideRef[] {
+  const out: GuideRef[] = [];
+  for (const m of xml.matchAll(/<url>([\s\S]*?)<\/url>/g)) {
+    const loc = m[1].match(/<loc>\s*(.*?)\s*<\/loc>/)?.[1];
+    if (!loc) continue;
+    let u: URL;
+    try { u = new URL(loc); } catch { continue; }
+    if (!/^\/msclassic\/guides\/[^/]+$/.test(u.pathname)) continue;
+    out.push({ url: u.origin + u.pathname, lastmod: m[1].match(/<lastmod>\s*(.*?)\s*<\/lastmod>/)?.[1] ?? '' });
+  }
+  return out;
+}
+
+export async function discoverGuides(o: { sitemapUrl: string; dominios: string[]; fetchFn?: typeof fetch }): Promise<GuideRef[]> {
+  if (!isAllowedUrl(o.sitemapUrl, o.dominios)) throw new Error('domínio não permitido');
+  const r = await (o.fetchFn ?? fetch)(o.sitemapUrl, { headers: { 'user-agent': USER_AGENT } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return parseSitemap(await r.text()).filter((g) => isAllowedUrl(g.url, o.dominios));
+}
+```
+
+- [ ] **Step 5: Ajustar `src/sources/load.ts`**
+
+Substituir o arquivo por esta versão (mesmo comportamento da Task 7 + `lastmod`/`auto`/`User-Agent`/`readCache`):
+```ts
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { isAllowedUrl } from './allowlist';
+import { USER_AGENT } from './discover';
+import { parseGuide } from './parser';
+import type { ParsedGuide, SourceData } from '../types';
+
+type Opts = { dominios: string[]; cacheDir: string; fetchFn?: typeof fetch; lastmod?: string; auto?: boolean };
+const EMPTY: ParsedGuide = { title: '', maps: [], quests: [], expRows: [], tips: [] };
+
+const counts = (g: ParsedGuide) =>
+  ({ maps: g.maps.length, quests: g.quests.length, expRows: g.expRows.length, tips: g.tips.length });
+const cacheFile = (dir: string, url: string) => path.join(dir, createHash('sha1').update(url).digest('hex') + '.json');
+
+export function readCache(cacheDir: string, url: string): SourceData | undefined {
+  try { return JSON.parse(fs.readFileSync(cacheFile(cacheDir, url), 'utf8')); } catch { return undefined; }
+}
+
+export async function loadSource(url: string, o: Opts): Promise<SourceData> {
+  if (!isAllowedUrl(url, o.dominios)) throw new Error('domínio não permitido');
+  fs.mkdirSync(o.cacheDir, { recursive: true });
+  try {
+    const r = await (o.fetchFn ?? fetch)(url, { redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const g = parseGuide(await r.text(), url);
+    const c = counts(g);
+    const empty = !(c.maps || c.quests || c.expRows || c.tips);
+    const data: SourceData = {
+      ...g,
+      source: { url, title: g.title || url, fetchedAt: Date.now(), status: empty ? 'vazio' : 'ok', counts: c, lastmod: o.lastmod, auto: o.auto },
+    };
+    fs.writeFileSync(cacheFile(o.cacheDir, url), JSON.stringify(data));
+    return data;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const cached = readCache(o.cacheDir, url);
+    if (cached) return { ...cached, source: { ...cached.source, status: 'erro', error: msg } };
+    return { ...EMPTY, source: { url, title: url, fetchedAt: 0, status: 'erro', error: msg, counts: counts(EMPTY), lastmod: o.lastmod, auto: o.auto } };
+  }
+}
+```
+
+- [ ] **Step 6: Implementar `src/sources/sync.ts`**
+
+```ts
+import fs from 'node:fs';
+import path from 'node:path';
+import { discoverGuides, type GuideRef } from './discover';
+import { loadSource, readCache } from './load';
+import type { SourceData } from '../types';
+
+const MANUAL_TTL_MS = 6 * 3_600_000;
+const CONCURRENCIA = 3;
+
+export type SyncOpts = { sitemapUrl: string; dominios: string[]; cacheDir: string; manual: string[]; fetchFn?: typeof fetch };
+export type SyncResult = { data: SourceData[]; descobertos: number; atualizados: number; offline: boolean };
+
+export async function syncAuto(o: SyncOpts): Promise<SyncResult> {
+  fs.mkdirSync(o.cacheDir, { recursive: true });
+  const indexFile = path.join(o.cacheDir, 'auto-index.json');
+  let refs: GuideRef[];
+  let offline = false;
+  try {
+    refs = await discoverGuides(o);
+    fs.writeFileSync(indexFile, JSON.stringify(refs));
+  } catch {
+    offline = true;
+    refs = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, 'utf8')) : [];
+  }
+  const porUrl = new Map(refs.map((r) => [r.url, r]));
+  const urls = [...new Set([...refs.map((r) => r.url), ...o.manual])];
+  const data: SourceData[] = [];
+  let atualizados = 0;
+  let i = 0;
+
+  const worker = async () => {
+    for (;;) {
+      const url = urls[i++];
+      if (!url) return;
+      try {
+        const ref = porUrl.get(url);
+        const cached = readCache(o.cacheDir, url);
+        const velho = !!cached && (ref
+          ? cached.source.lastmod !== ref.lastmod
+          : Date.now() - cached.source.fetchedAt > MANUAL_TTL_MS);
+        const precisa = !offline && (!cached || cached.source.status === 'erro' || velho);
+        if (!precisa) {
+          if (cached) data.push({ ...cached, source: { ...cached.source, auto: !!ref } });
+          continue;
+        }
+        data.push(await loadSource(url, { dominios: o.dominios, cacheDir: o.cacheDir, fetchFn: o.fetchFn, lastmod: ref?.lastmod, auto: !!ref }));
+        atualizados++;
+      } catch {
+        // domínio recusado ou falha isolada: ignora só esta fonte
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCIA }, worker));
+  data.sort((a, b) => a.source.url.localeCompare(b.source.url));
+  return { data, descobertos: refs.length, atualizados, offline };
+}
+```
+
+- [ ] **Step 7: Rodar e ver passar**
+
+Run: `npx vitest run tests/sync.test.ts tests/sources.test.ts` → PASS (a suíte da Task 7 continua verde com o `load.ts` novo).  
+Run: `npx tsc --noEmit` → sem erros.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A && git commit -m "feat: descoberta e sincronização automática de guias via sitemap"
+```
+
+---
+
+### Task 9: ViewModel (puro)
 
 **Files:**
 - Create: `src/viewmodel.ts`, `tests/viewmodel.test.ts`
+- Modify: `src/types.ts` — acrescentar `export type SyncInfo = { auto: boolean; guias: number; ultima: number; offline: boolean };` e o campo `sync: SyncInfo;` em `ViewModel`
 
 **Interfaces:**
 - Consumes: `Estado`, `Library`, `Source`, `Limiares`, `ViewModel`, e todo o `advisor`.
 - Produces: `buildViewModel(i: VMInput): ViewModel` com
-  `VMInput = { estado: Estado | null; lib: Library; fontes: Source[]; feitas: Set<string>; lim: Limiares; capturaPreta: boolean; jogoNaoEncontrado: boolean; precisaWizard: boolean; opacidade: number; expandido: boolean }`
+  `VMInput = { estado: Estado | null; lib: Library; fontes: Source[]; feitas: Set<string>; lim: Limiares; capturaPreta: boolean; jogoNaoEncontrado: boolean; precisaWizard: boolean; opacidade: number; expandido: boolean; sync: SyncInfo }`
 
 - [ ] **Step 1: Teste que falha**
 
@@ -1202,12 +1497,13 @@ const lib: Library = {
   maps: [{ name: 'Line 1', street: 's', maxExpHr: 1000, mob: { name: 'm' }, why: '', levelMin: 11, levelMax: 15, sourceUrl: 'u' },
          { name: 'Novo', street: 's', maxExpHr: 2000, mob: { name: 'm' }, why: '', levelMin: 14, levelMax: 18, sourceUrl: 'u' }],
   quests: [{ id: '1', name: 'q', npc: '', level: 14, exp: 5, reward: '', sourceUrl: 'u' }],
-  expRows: [], tips: [{ kind: 'ap', title: 'AP', text: 't', sourceUrl: 'u' }],
+  expRows: [], tips: [{ kind: 'ap', guide: 'G', title: 'AP', text: 't', sourceUrl: 'u' }],
 };
 const est = (o: Partial<Estado> = {}): Estado =>
   ({ level: 13, expAbs: 1, expPct: 1, expPorHora: 800, upou: false, semLeitura: false, ...o });
 const base = { lib, fontes: [], feitas: new Set<string>(), lim: { verde: 0.7, amarelo: 0.4 },
-  capturaPreta: false, jogoNaoEncontrado: false, precisaWizard: false, opacidade: 1, expandido: false };
+  capturaPreta: false, jogoNaoEncontrado: false, precisaWizard: false, opacidade: 1, expandido: false,
+  sync: { auto: true, guias: 34, ultima: 0, offline: false } };
 
 describe('buildViewModel', () => {
   it('monta mapas, quests, dicas e veredito para o level', () => {
@@ -1220,6 +1516,11 @@ describe('buildViewModel', () => {
     expect(vm.levelUp).toMatchObject({ de: 13, para: 14 });
     expect(vm.levelUp!.novidades.maps.map((m) => m.name)).toEqual(['Novo']);
     expect(vm.levelUp!.novidades.quests.map((q) => q.id)).toEqual(['1']);
+  });
+  it('avisa quando a sincronização está offline', () => {
+    const vm = buildViewModel({ ...base, estado: est(), sync: { auto: true, guias: 3, ultima: 1, offline: true } });
+    expect(vm.avisos.join('|')).toMatch(/cache/i);
+    expect(vm.sync.guias).toBe(3);
   });
   it('avisos: sem fontes, captura preta, jogo não encontrado', () => {
     const a = buildViewModel({ ...base, estado: null, capturaPreta: true, jogoNaoEncontrado: true }).avisos.join('|');
@@ -1237,19 +1538,20 @@ Run: `npx vitest run tests/viewmodel.test.ts` → FAIL.
 
 ```ts
 import { dicasPara, mapasParaLevel, novidadesNoLevel, questsParaLevel, veredito } from './advisor';
-import type { Estado, Library, Limiares, Source, ViewModel } from './types';
+import type { Estado, Library, Limiares, Source, SyncInfo, ViewModel } from './types';
 
 export type VMInput = {
   estado: Estado | null; lib: Library; fontes: Source[]; feitas: Set<string>; lim: Limiares;
   capturaPreta: boolean; jogoNaoEncontrado: boolean; precisaWizard: boolean;
-  opacidade: number; expandido: boolean;
+  opacidade: number; expandido: boolean; sync: SyncInfo;
 };
 
 export function buildViewModel(i: VMInput): ViewModel {
   const { estado: e, lib } = i;
   const mapas = e ? mapasParaLevel(lib.maps, e.level) : [];
   const avisos: string[] = [];
-  if (!i.fontes.length) avisos.push('Nenhuma fonte configurada. Cole links de guias na aba Fontes.');
+  if (!i.fontes.length) avisos.push('Nenhuma fonte carregada. Verifique a conexão ou ligue a sincronização na aba Fontes.');
+  if (i.sync.offline) avisos.push('Sem conexão com o site: usando guias em cache.');
   if (i.capturaPreta) avisos.push('Captura preta: o jogo parece estar em tela cheia exclusiva. Use o modo janela/borderless ou mova o widget para o 2º monitor.');
   if (i.jogoNaoEncontrado) avisos.push('Janela do jogo não encontrada.');
   if (e?.semLeitura) avisos.push('Sem leitura da HUD agora (mantendo último valor).');
@@ -1265,7 +1567,7 @@ export function buildViewModel(i: VMInput): ViewModel {
     levelUp: e?.upou
       ? { de: e.level - 1, para: e.level, dicas, novidades: novidadesNoLevel(lib.maps, lib.quests, e.level) }
       : undefined,
-    fontes: i.fontes, avisos, capturaPreta: i.capturaPreta,
+    fontes: i.fontes, avisos, capturaPreta: i.capturaPreta, sync: i.sync,
     precisaWizard: i.precisaWizard, opacidade: i.opacidade, expandido: i.expandido,
   };
 }
@@ -1283,7 +1585,7 @@ git add -A && git commit -m "feat: viewmodel puro com avisos e cartão de level 
 
 ---
 
-### Task 9: Shell Electron (main, preload, loop de captura)
+### Task 10: Shell Electron (main, preload, loop de captura)
 
 **Files:**
 - Create: `build.mjs`, `src/main/main.ts`, `src/main/preload.ts`, `src/renderer/api.d.ts`
@@ -1295,6 +1597,8 @@ git add -A && git commit -m "feat: viewmodel puro com avisos e cartão de level 
   - `addSource(url: string): Promise<{ ok: boolean; erro?: string }>`
   - `removeSource(url: string): Promise<void>`
   - `refreshSources(): Promise<void>`
+  - `syncNow(): Promise<void>` (sincroniza guias agora)
+  - `setAutoSync(on: boolean): Promise<void>`
   - `toggleQuest(id: string): Promise<void>`
   - `setExpanded(b: boolean): Promise<void>`
   - `setOpacity(n: number): Promise<void>`
@@ -1328,6 +1632,8 @@ export interface Api {
   addSource(url: string): Promise<{ ok: boolean; erro?: string }>;
   removeSource(url: string): Promise<void>;
   refreshSources(): Promise<void>;
+  syncNow(): Promise<void>;
+  setAutoSync(on: boolean): Promise<void>;
   toggleQuest(id: string): Promise<void>;
   setExpanded(b: boolean): Promise<void>;
   setOpacity(n: number): Promise<void>;
@@ -1350,6 +1656,8 @@ const api: Api = {
   addSource: (u) => ipcRenderer.invoke('src:add', u),
   removeSource: (u) => ipcRenderer.invoke('src:remove', u),
   refreshSources: () => ipcRenderer.invoke('src:refresh'),
+  syncNow: () => ipcRenderer.invoke('sync:now'),
+  setAutoSync: (on) => ipcRenderer.invoke('sync:toggle', on),
   toggleQuest: (id) => ipcRenderer.invoke('quest:toggle', id),
   setExpanded: (b) => ipcRenderer.invoke('win:expand', b),
   setOpacity: (n) => ipcRenderer.invoke('win:opacity', n),
@@ -1373,6 +1681,7 @@ import { createTracker } from '../tracker';
 import { makeExpToNext } from '../advisor';
 import { isAllowedUrl } from '../sources/allowlist';
 import { loadSource } from '../sources/load';
+import { syncAuto } from '../sources/sync';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
 import type { Estado, Img, Library, Regions, SourceData } from '../types';
@@ -1388,7 +1697,9 @@ let data: SourceData[] = [];
 let tracker = createTracker(() => undefined);
 let estado: Estado | null = null;
 let flags = { capturaPreta: false, jogoNaoEncontrado: false };
+let syncInfo = { ultima: 0, offline: false };
 let busy = false;
+const SYNC_INTERVALO_MS = 30 * 60_000;
 
 const lib = (): Library => ({
   maps: data.flatMap((d) => d.maps), quests: data.flatMap((d) => d.quests),
@@ -1401,13 +1712,21 @@ function rebuildTracker() {
   tracker = createTracker(makeExpToNext(lib().expRows));
 }
 async function loadAll() {
-  data = await Promise.all(cfg.sources.map((u) => loadSource(u, { dominios: cfg.dominios, cacheDir: cacheDir() })));
+  if (cfg.autoSync) {
+    const r = await syncAuto({ sitemapUrl: cfg.sitemapUrl, dominios: cfg.dominios, cacheDir: cacheDir(), manual: cfg.sources });
+    data = r.data;
+    syncInfo = { ultima: Date.now(), offline: r.offline };
+  } else {
+    data = await Promise.all(cfg.sources.map((u) => loadSource(u, { dominios: cfg.dominios, cacheDir: cacheDir() })));
+    syncInfo = { ultima: Date.now(), offline: false };
+  }
   rebuildTracker();
 }
 function emit() {
   const vm = buildViewModel({
     estado, lib: lib(), fontes: data.map((d) => d.source), feitas: new Set(cfg.questsFeitas), lim: cfg.limiares,
     ...flags, precisaWizard: !cfg.gamePath, opacidade: cfg.opacidade, expandido: cfg.janela.expandido,
+    sync: { auto: cfg.autoSync, guias: data.filter((d) => d.source.auto).length, ...syncInfo },
   });
   if (!win.isDestroyed()) win.webContents.send('vm', vm);
 }
@@ -1470,6 +1789,8 @@ function registerIpc() {
     await loadAll(); emit();
   });
   ipcMain.handle('src:refresh', async () => { await loadAll(); emit(); });
+  ipcMain.handle('sync:now', async () => { await loadAll(); emit(); });
+  ipcMain.handle('sync:toggle', async (_e, on: boolean) => { cfg.autoSync = !!on; store.save(cfg); await loadAll(); emit(); });
   ipcMain.handle('quest:toggle', (_e, id: string) => {
     const s = new Set(cfg.questsFeitas);
     s.has(id) ? s.delete(id) : s.add(id);
@@ -1509,6 +1830,7 @@ app.whenReady().then(async () => {
   let through = false;
   globalShortcut.register('Ctrl+Alt+C', () => { through = !through; win.setIgnoreMouseEvents(through, { forward: true }); });
   setInterval(tick, TICK_MS);
+  setInterval(() => { if (cfg.autoSync) void loadAll().then(emit); }, SYNC_INTERVALO_MS);
   tick();
 });
 app.on('will-quit', () => { globalShortcut.unregisterAll(); void reader?.close(); });
@@ -1519,7 +1841,7 @@ Nota: o flag `upou` do `Estado` vale só para um `push` do tracker; o renderer g
 
 - [ ] **Step 5: Verificar build e typecheck**
 
-Run: `npx tsc --noEmit` → sem erros. Run: `node build.mjs` → gera `dist/main.js`, `preload.js` (renderer ainda falha até a Task 10; criar stubs vazios `src/renderer/renderer.ts`, `index.html`, `styles.css` se necessário para o build passar).
+Run: `npx tsc --noEmit` → sem erros. Run: `node build.mjs` → gera `dist/main.js`, `preload.js` (renderer ainda falha até a Task 11; criar stubs vazios `src/renderer/renderer.ts`, `index.html`, `styles.css` se necessário para o build passar).
 
 - [ ] **Step 6: Commit**
 
@@ -1529,14 +1851,14 @@ git add -A && git commit -m "feat: shell electron com captura, OCR, IPC e hotkey
 
 ---
 
-### Task 10: UI do widget (renderer)
+### Task 11: UI do widget (renderer)
 
 **Files:**
 - Create: `src/renderer/index.html`, `src/renderer/styles.css`, `src/renderer/renderer.ts`
 
 **Interfaces:**
-- Consumes: `window.api` (Task 9), `ViewModel`.
-- Produces: `startWizard(onDone: () => void): void` é consumido da Task 11 (`src/renderer/wizard.ts`); aqui apenas importar e chamar quando `vm.precisaWizard`.
+- Consumes: `window.api` (Task 10), `ViewModel`.
+- Produces: `startWizard(onDone: () => void): void` é consumido da Task 12 (`src/renderer/wizard.ts`); aqui apenas importar e chamar quando `vm.precisaWizard`.
 
 - [ ] **Step 1: `src/renderer/index.html`**
 
@@ -1689,7 +2011,14 @@ function tabBody(v: ViewModel): Node[] {
 }
 
 function fontesTab(v: ViewModel): Node[] {
-  const input = h('input', { type: 'text', placeholder: 'Cole o link de um guia (meowdb) e Enter' });
+  const input = h('input', { type: 'text', placeholder: 'Link extra (opcional) e Enter' });
+  const auto = h('div', { class: 'row' },
+    h('div', { class: 't' }, h('b', null, 'Sincronização automática (meowdb)'),
+      h('span', { class: 'm' }, v.sync.auto
+        ? `${v.sync.guias} guias · ${v.sync.ultima ? 'sincronizado às ' + new Date(v.sync.ultima).toLocaleTimeString('pt-BR') : 'aguardando'}${v.sync.offline ? ' · offline (cache)' : ''}`
+        : 'desligada')),
+    h('button', { onclick: () => void window.api.setAutoSync(!v.sync.auto) }, v.sync.auto ? 'Desligar' : 'Ligar'),
+    h('button', { title: 'Sincronizar agora', onclick: () => void window.api.syncNow() }, '⟳'));
   const msg = h('div', { class: 'm' });
   input.addEventListener('keydown', async (ev) => {
     if ((ev as KeyboardEvent).key !== 'Enter' || !input.value.trim()) return;
@@ -1699,11 +2028,11 @@ function fontesTab(v: ViewModel): Node[] {
     input.blur(); render();
   });
   return [
-    input, msg,
-    ...v.fontes.map((f) => h('div', { class: 'row' }, h('div', { class: 't' }, h('b', null, f.title),
+    auto, input, msg,
+    ...v.fontes.filter((f) => !f.auto).map((f) => h('div', { class: 'row' }, h('div', { class: 't' }, h('b', null, f.title),
       h('span', { class: 'm' }, `${f.status} · ${f.counts.maps} mapas, ${f.counts.quests} quests, ${f.counts.tips} dicas`)),
       h('button', { onclick: () => void window.api.removeSource(f.url) }, '✕'))),
-    v.fontes.length ? h('button', { onclick: () => void window.api.refreshSources() }, 'Atualizar todas') : empty('Nenhuma fonte ainda.'),
+    v.fontes.some((f) => !f.auto) ? h('button', { onclick: () => void window.api.refreshSources() }, 'Atualizar links extras') : null,
     h('button', { onclick: () => { wizard = true; startWizard(() => { wizard = false; render(); }); } }, 'Recalibrar HUD'),
   ];
 }
@@ -1719,12 +2048,12 @@ Nota: o `onVM` chama `render()` a cada 2 s; o guard `activeElement instanceof HT
 
 - [ ] **Step 4: Stub temporário do wizard para compilar**
 
-Criar `src/renderer/wizard.ts` com `export function startWizard(onDone: () => void) { onDone(); }` (substituído na Task 11).
+Criar `src/renderer/wizard.ts` com `export function startWizard(onDone: () => void) { onDone(); }` (substituído na Task 12).
 
 - [ ] **Step 5: Verificar**
 
 Run: `npx tsc --noEmit && node build.mjs` → sem erros.  
-Run: `npm start` → janela flutuante aparece (compacta). Sem o jogo aberto mostra "Aguardando jogo…" e o aviso "Janela do jogo não encontrada" ao expandir. Testar: expandir/recolher, arrastar, aba Fontes colando `https://meowdb.com/msclassic/guides/best-grind-maps-every-level` (deve listar a fonte com contagens > 0), tentar `https://evil.com/x` (deve recusar), hotkeys `Ctrl+Alt+M` e `Ctrl+Alt+C`.
+Run: `npm start` → janela flutuante aparece (compacta). Sem o jogo aberto mostra "Aguardando jogo…" e o aviso "Janela do jogo não encontrada" ao expandir. Testar: expandir/recolher, arrastar, aba Fontes: com internet, a linha "Sincronização automática" deve mostrar ~34 guias e a hora da sincronização; o botão ⟳ sincroniza de novo (sem rebaixar nada se nada mudou); "Desligar" zera os guias automáticos. Colar um link extra válido (ex.: um guia do meowdb) entra na lista de extras; `https://evil.com/x` deve ser recusado. Testar as hotkeys `Ctrl+Alt+M` e `Ctrl+Alt+C`.
 
 - [ ] **Step 6: Commit**
 
@@ -1734,7 +2063,7 @@ git add -A && git commit -m "feat: ui do widget (compacto/expandido, abas, cart�
 
 ---
 
-### Task 11: Assistente de primeira execução (calibração)
+### Task 12: Assistente de primeira execução (calibração)
 
 **Files:**
 - Modify: `src/renderer/wizard.ts` (substituir stub)
@@ -1749,11 +2078,6 @@ git add -A && git commit -m "feat: ui do widget (compacto/expandido, abas, cart�
 ```ts
 import type { Region, Regions } from '../types';
 
-const SUGERIDAS = [
-  'https://meowdb.com/msclassic/guides/best-grind-maps-every-level',
-  'https://meowdb.com/msclassic/guides/exp-table-level-1-to-100',
-  'https://meowdb.com/msclassic/guides/beginners-guide-first-steps-in-maple-world',
-];
 const ORDEM: { key: keyof Regions; nome: string }[] = [
   { key: 'level', nome: 'o número do LEVEL (ao lado de "LV.")' },
   { key: 'cls', nome: 'o nome da CLASSE (ex.: Archer) e o nick' },
@@ -1826,12 +2150,11 @@ export function startWizard(onDone: () => void) {
     await window.api.saveCalibration(key, regs, gamePath);
     const box = el('div', 'body nodrag');
     const msg = el('div', 'm');
-    box.append(el('h4', undefined, 'Passo 3/3 · Fontes'), el('div', 'm', 'Adicione guias sugeridos (ou cole outros depois na aba Fontes):'));
-    for (const u of SUGERIDAS) {
-      const b = el('button', undefined, '+ ' + u.split('/').pop());
-      b.onclick = async () => { const r = await window.api.addSource(u); msg.textContent = r.ok ? 'Adicionada: ' + u.split('/').pop() : (r.erro ?? 'Erro'); };
-      box.append(b);
-    }
+    box.append(el('h4', undefined, 'Passo 3/3 · Guias'),
+      el('div', 'm', 'Todos os guias do MapleStory Classic no meowdb entram automaticamente e se mantêm atualizados. Links extras podem ser colados depois, na aba Fontes.'));
+    const sync = el('button', undefined, 'Sincronizar agora');
+    sync.onclick = async () => { msg.textContent = 'Sincronizando…'; await window.api.syncNow(); msg.textContent = 'Guias sincronizados.'; };
+    box.append(sync);
     const fim = el('button', undefined, 'Concluir');
     fim.onclick = () => { void window.api.setExpanded(false); onDone(); };
     box.append(msg, fim);
@@ -1845,7 +2168,7 @@ export function startWizard(onDone: () => void) {
 - [ ] **Step 2: Verificar**
 
 Run: `npx tsc --noEmit && npm start`  
-Com o jogo em janela/borderless (ou sem jogo, usando o screenshot mais recente da pasta): o assistente abre na primeira execução; arrastar os 4 retângulos; fontes sugeridas adicionam; ao concluir, o widget volta ao compacto e passa a ler a HUD. Reabrir o app: o assistente **não** reaparece (config salva). Aba Fontes → "Recalibrar HUD" reabre o assistente.
+Com o jogo em janela/borderless (ou sem jogo, usando o screenshot mais recente da pasta): o assistente abre na primeira execução; arrastar os 4 retângulos; o passo 3 mostra "Sincronizar agora" (baixa os guias automáticos); ao concluir, o widget volta ao compacto e passa a ler a HUD. Reabrir o app: o assistente **não** reaparece (config salva). Aba Fontes → "Recalibrar HUD" reabre o assistente.
 
 - [ ] **Step 3: Commit**
 
@@ -1855,7 +2178,7 @@ git add -A && git commit -m "feat: assistente de primeira execução com calibra
 
 ---
 
-### Task 12: Empacotar e validar nos modos de janela
+### Task 13: Empacotar e validar nos modos de janela
 
 **Files:**
 - Modify: `package.json` (já tem script `dist` e `build`)
@@ -1878,6 +2201,8 @@ Run: `npm run dist` → gera `release/*.exe` (portable). Abrir o `.exe` gerado e
 6. **Fonte offline:** desligar a internet, reabrir: aba Fontes mostra "erro" mas dados vêm do cache.
 7. **Hotkeys e persistência:** `Ctrl+Alt+M`, `Ctrl+Alt+C`; posição e opacidade persistem após reiniciar.
 8. **Resoluções:** se a janela do jogo mudar de tamanho, o aviso/calibração por resolução funciona (recalibrar cria nova chave `WxH`).
+9. **Sincronização automática:** com internet, a aba Fontes mostra todos os guias do sitemap (hoje 34); reabrir o app não rebaixa guias inalterados (só o sitemap); se o site publicar um guia novo ou mudar um `lastmod`, ele entra/atualiza na próxima sincronização (⟳ força na hora); offline, aparece o aviso de cache e os dados continuam.
+10. **Dicas por classe:** com a classe lida como "Archer", o cartão de level up mostra dicas de AP/SP de guias Bowman/genéricos e **não** de guias de Warrior/Thief/Magician.
 
 - [ ] **Step 4: Commit**
 
@@ -1892,4 +2217,4 @@ git add -A && git commit -m "chore: empacotamento portable e checklist de valida
 - **Cobertura:** capture/OCR (T2–T3), tracker (T4), advisor (T5), parser (T6), allowlist/cache/config (T7), viewmodel e avisos (T8), janela/captura/IPC/hotkeys/click-through/opacidade/posição (T9), UI compacto/expandido/abas/level up/fontes (T10), assistente 3 passos (T11), empacotamento e validação dos modos (T12). Erros: cache offline (T7), OCR implausível (T4), captura preta (T8/T9), sem fontes (T8/T10).
 - **Desvios declarados** em *Global Constraints*: ícones sem cache próprio em disco; level up por subida do level lido.
 - **Consistência de tipos:** `Reading`, `Estado`, `ViewModel`, `Library`, `SourceData` definidos na T1 e usados com os mesmos nomes nas demais. `HudReader.read` retorna `Omit<Reading,'t'>` e o main acrescenta `t`.
-- **Riscos abertos (de propósito):** calibração fina das regiões e do predicado de cor do level (T3, passos 5–9); nome da janela do jogo para `desktopCapturer` (regex `/maple/i`, ajustar se o título real for diferente); comportamento em tela cheia exclusiva (T12).
+- **Riscos abertos (de propósito):** calibração fina das regiões e do predicado de cor do level (T3, passos 5–9); nome da janela do jogo para `desktopCapturer` (regex `/maple/i`, ajustar se o título real for diferente); comportamento em tela cheia exclusiva (T13).

@@ -16,7 +16,7 @@ Widget flutuante (overlay) para MapleStory Classic World que, enquanto o jogador
 - **Stack:** Electron + TypeScript. Distribuível como instalador `.exe`.
 - **Captura de dados:** leitura de tela (OCR/template matching) da HUD. Sem injeção, sem leitura de memória (risco de ban).
 - **Modos de janela:** janela e borderless via overlay always-on-top. Tela cheia exclusiva não permite overlay: o widget detecta captura preta e orienta o usuário (mover para 2º monitor ou usar borderless). Validar empiricamente no PC do usuário.
-- **Fontes:** o usuário cola links; o widget baixa o HTML (Next.js SSR, sem API) e extrai tabelas/seções.
+- **Fontes:** **automáticas por padrão** — o widget lê o sitemap do meowdb, carrega todos os guias do MapleStory Classic (`/msclassic/guides/<slug>`) e os mantém sincronizados (guia novo no site entra no widget; guia alterado é rebaixado). Links colados manualmente continuam suportados como extras. O HTML (Next.js SSR, sem API) é baixado e as tabelas/seções são extraídas.
 - **Pasta do jogo:** `C:\Nexon\Library\maplestorycw` (sugerida e validada no assistente). Não há log de jogo com EXP; a pasta serve para localizar screenshots (`appdata\Maple_A_*.jpg`) e, no futuro, ícones.
 
 ## Fatos levantados
@@ -59,6 +59,15 @@ Detecta pelo conteúdo, não pela URL:
 - seção H2 cujo título bate com `ability points|skill points|AP|SP|build` → `Tip` (texto como está, com fonte e link).
 
 Não reconhecido é ignorado e contado em `counts`. Nada reconhecido → status `vazio`, listando as tabelas vistas. A classe vem do OCR e filtra guias de classe por título. AP/SP não é interpretado automaticamente: mostra-se o trecho do guia.
+
+## Sincronização automática de guias
+
+- Índice: `https://meowdb.com/msclassic/sitemap.xml` (confirmado em 2026-10-22: 34 guias, cada um com `lastmod`; a página `/msclassic/guides` lista os mesmos 34, sem paginação). Guias = URLs `/msclassic/guides/<slug>`.
+- Sincroniza na abertura do app e a cada 30 min (e sob demanda, na aba Fontes). Só baixa guia **novo** ou com `lastmod` diferente do cache; guia com erro é tentado de novo na próxima rodada. Fontes manuais fora do sitemap são reverificadas a cada 6 h.
+- Educado com o site: até 3 downloads simultâneos, `User-Agent` identificado, nada de baixar o que não mudou.
+- Offline: usa o índice e os guias em cache e avisa na UI.
+- Dicas de AP/SP vêm de guias de várias classes; cada `Tip` carrega o título do guia de origem e só aparece para a linhagem da classe lida da HUD (ex.: "Archer" ↔ guias "Bowman"); guias genéricos (sem classe no título) valem para todos.
+- Toggle "Sincronização automática" (ligada por padrão) na aba Fontes; desligada, só valem os links manuais.
 
 ## UI
 
