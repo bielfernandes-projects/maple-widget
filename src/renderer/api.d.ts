@@ -11,8 +11,9 @@ export interface Api {
   setExpanded(b: boolean): Promise<void>;
   setOpacity(n: number): Promise<void>;
   pickGameFolder(): Promise<string | null>;
-  getShot(): Promise<{ dataUrl: string; w: number; h: number } | null>;
-  saveCalibration(key: string, regions: Regions, gamePath: string): Promise<void>;
+  getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number } | null>;
+  listWindows(): Promise<string[]>;
+  saveCalibration(key: string, regions: Regions | null, gamePath: string, janelaJogo?: string): Promise<void>;
   getConfig(): Promise<Config>;
 }
 declare global { interface Window { api: Api } }

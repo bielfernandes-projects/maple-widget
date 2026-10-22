@@ -73,6 +73,13 @@ describe('Store', () => {
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ janela: { x: 5 } }));
     expect(new Store(dir).load().janela).toEqual({ expandido: false, x: 5 });
   });
+  it('config antiga sem janelaJogo ganha o padrão', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ gamePath: 'Z' }));
+    const c = new Store(dir).load();
+    expect(c.janelaJogo).toBe('');
+    expect(c.gamePath).toBe('Z');
+  });
   it('config que não é objeto volta ao default', () => {
     for (const txt of ['null', '[1,2]']) {
       const dir = tmp();

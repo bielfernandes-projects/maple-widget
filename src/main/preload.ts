@@ -13,8 +13,9 @@ const api: Api = {
   setExpanded: (b) => ipcRenderer.invoke('win:expand', b),
   setOpacity: (n) => ipcRenderer.invoke('win:opacity', n),
   pickGameFolder: () => ipcRenderer.invoke('wiz:folder'),
-  getShot: () => ipcRenderer.invoke('wiz:shot'),
-  saveCalibration: (k, r, p) => ipcRenderer.invoke('wiz:save', k, r, p),
+  getShot: (j, p) => ipcRenderer.invoke('wiz:shot', j, p),
+  listWindows: () => ipcRenderer.invoke('wiz:windows'),
+  saveCalibration: (k, r, p, j) => ipcRenderer.invoke('wiz:save', k, r, p, j),
   getConfig: () => ipcRenderer.invoke('cfg:get'),
 };
 contextBridge.exposeInMainWorld('api', api);

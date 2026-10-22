@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validGamePathShape, validRegions, validResKey } from '../src/main/validate';
+import { validGamePathShape, validJanelaJogo, validRegions, validResKey } from '../src/main/validate';
 
 const r = { x: 0.1, y: 0.2, w: 0.3, h: 0.4 };
 const ok = () => ({ level: { ...r }, exp: { ...r }, cls: { ...r }, map: { ...r } });
@@ -58,4 +58,16 @@ describe('validOpenUrl', () => {
     expect(validOpenUrl(u, D)).toBe(false);
   });
   it('rejeita nao-string', () => { for (const x of [null, undefined, 1, {}, ['https://meowdb.com/']]) expect(validOpenUrl(x, D)).toBe(false); });
+});
+
+describe('validJanelaJogo', () => {
+  it('aceita string até 200 (inclusive vazia)', () => {
+    expect(validJanelaJogo('')).toBe(true);
+    expect(validJanelaJogo('MapleStory')).toBe(true);
+    expect(validJanelaJogo('a'.repeat(200))).toBe(true);
+  });
+  it('rejeita >200 e não-string', () => {
+    expect(validJanelaJogo('a'.repeat(201))).toBe(false);
+    for (const x of [null, undefined, 1, {}, []]) expect(validJanelaJogo(x)).toBe(false);
+  });
 });

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { HudReader, DEFAULT_REGIONS } from '../capture/hud';
 import { bgraToImg, decodeJpeg, isBlack, toPngBuffer } from '../capture/image';
+import { escolherJanela } from '../capture/window';
 import { createTracker } from '../tracker';
 import { makeExpToNext } from '../advisor';
 import { isAllowedUrl } from '../sources/allowlist';
@@ -10,9 +11,10 @@ import { loadSource } from '../sources/load';
 import { syncAuto } from '../sources/sync';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { validGamePathShape, validOpenUrl, validRegions, validResKey } from './validate';
+import { validGamePathShape, validJanelaJogo, validOpenUrl, validRegions, validResKey } from './validate';
 import type { Estado, Img, Library, SourceData } from '../types';
 
+const OVERLAY = 'MW Overlay';
 const TICK_MS = 2000;
 const W_COMPACTO = { w: 340, h: 64 }, W_EXPANDIDO = { w: 340, h: 460 };
 
@@ -71,9 +73,10 @@ function emit() {
   win.webContents.send('vm', vm);
 }
 
-async function captureGame(): Promise<Img | null> {
+async function captureGame(janela = cfg.janelaJogo): Promise<Img | null> {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1080 } });
-  const s = srcs.find((x) => /maplestory/i.test(x.name) && !/overlay/i.test(x.name));
+  const nome = escolherJanela(srcs.map((x) => x.name).filter((n) => n !== OVERLAY), janela);
+  const s = nome === undefined ? undefined : srcs.find((x) => x.name === nome);
   if (!s) return null;
   const { width, height } = s.thumbnail.getSize();
   return width && height ? bgraToImg(s.thumbnail.toBitmap(), width, height) : null;
@@ -100,7 +103,7 @@ async function tick() {
 
 function createWindow() {
   win = new BrowserWindow({
-    title: 'MW Overlay', width: W_COMPACTO.w, height: W_COMPACTO.h, x: cfg.janela.x, y: cfg.janela.y,
+    title: OVERLAY, width: W_COMPACTO.w, height: W_COMPACTO.h, x: cfg.janela.x, y: cfg.janela.y,
     frame: false, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
   });
@@ -174,20 +177,34 @@ function registerIpc() {
     const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], defaultPath: 'C:\\Nexon\\Library\\maplestorycw' });
     return r.canceled ? null : (r.filePaths[0] ?? null);
   });
-  handle<{ dataUrl: string; w: number; h: number } | null>('wiz:shot', null, async () => {
-    const live = await captureGame();
+  handle<{ dataUrl: string; w: number; h: number } | null>('wiz:shot', null, async (janela, pasta) => {
+    // janela/pasta: escolhas do assistente ainda não gravadas (opcionais, validadas)
+    const j = validJanelaJogo(janela) ? janela : cfg.janelaJogo;
+    const gp = validGamePathShape(pasta) && isDir(pasta) ? pasta : cfg.gamePath;
+    const live = await captureGame(j);
     if (live && !isBlack(live)) return { dataUrl: 'data:image/png;base64,' + toPngBuffer(live).toString('base64'), w: live.w, h: live.h };
-    if (!cfg.gamePath) return null;
-    const dir = path.join(cfg.gamePath, 'appdata');
+    if (!gp) return null;
+    const dir = path.join(gp, 'appdata');
     const f = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^Maple_A_.*\.jpg$/.test(n)).sort().at(-1) : undefined;
     if (!f) return null;
     const buf = fs.readFileSync(path.join(dir, f));
     const im = decodeJpeg(buf);
     return { dataUrl: 'data:image/jpeg;base64,' + buf.toString('base64'), w: im.w, h: im.h };
   });
-  handle<void>('wiz:save', undefined, (key, regions, gamePath) => {
+  handle<string[]>('wiz:windows', [], async () => {
+    const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
+    return [...new Set(srcs.map((x) => x.name).filter((n) => n && n !== OVERLAY))].slice(0, 30);
+  });
+  handle<void>('wiz:save', undefined, (key, regions, gamePath, janelaJogo) => {
+    if (janelaJogo !== undefined && !validJanelaJogo(janelaJogo)) return;
+    // regions === null: só pasta/janela (assistente sem calibração)
+    if (regions === null) {
+      if (!validGamePathShape(gamePath) || !(gamePath === '' || isDir(gamePath))) return;
+      cfg.gamePath = gamePath; if (janelaJogo !== undefined) cfg.janelaJogo = janelaJogo; store.save(cfg); emit();
+      return;
+    }
     if (typeof key !== 'string' || !validResKey(key) || !validRegions(regions) || !validGamePathShape(gamePath) || !(gamePath === '' || isDir(gamePath))) return;
-    cfg.regions[key] = regions; cfg.gamePath = gamePath; store.save(cfg); emit();
+    cfg.regions[key] = regions; cfg.gamePath = gamePath; if (janelaJogo !== undefined) cfg.janelaJogo = janelaJogo; store.save(cfg); emit();
   });
 }
 
