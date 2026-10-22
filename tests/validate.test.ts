@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validRegions, validResKey } from '../src/main/validate';
+import { validGamePathShape, validRegions, validResKey } from '../src/main/validate';
 
 const r = { x: 0.1, y: 0.2, w: 0.3, h: 0.4 };
 const ok = () => ({ level: { ...r }, exp: { ...r }, cls: { ...r }, map: { ...r } });
@@ -32,5 +32,17 @@ describe('validRegions', () => {
   it('rejeita __proto__ como chave propria', () => {
     expect(validRegions(JSON.parse('{"__proto__":{"x":0,"y":0,"w":1,"h":1},"level":{"x":0,"y":0,"w":1,"h":1},"exp":{"x":0,"y":0,"w":1,"h":1},"cls":{"x":0,"y":0,"w":1,"h":1}}'))).toBe(false);
     expect(validRegions(JSON.parse('{"level":{"__proto__":1,"x":0,"y":0,"w":1,"h":1},"exp":{"x":0,"y":0,"w":1,"h":1},"cls":{"x":0,"y":0,"w":1,"h":1},"map":{"x":0,"y":0,"w":1,"h":1}}'))).toBe(false);
+  });
+});
+
+describe('validGamePathShape', () => {
+  it('aceita vazio e caminho normal', () => {
+    expect(validGamePathShape('')).toBe(true);
+    expect(validGamePathShape('C:\Nexon\Library\maplestorycw')).toBe(true);
+    expect(validGamePathShape('a'.repeat(500))).toBe(true);
+  });
+  it('rejeita nao-string e longo demais', () => {
+    for (const x of [null, undefined, 1, {}, []]) expect(validGamePathShape(x)).toBe(false);
+    expect(validGamePathShape('a'.repeat(501))).toBe(false);
   });
 });

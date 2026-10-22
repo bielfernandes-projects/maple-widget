@@ -10,7 +10,7 @@ import { loadSource } from '../sources/load';
 import { syncAuto } from '../sources/sync';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { validRegions, validResKey } from './validate';
+import { validGamePathShape, validRegions, validResKey } from './validate';
 import type { Estado, Img, Library, SourceData } from '../types';
 
 const TICK_MS = 2000;
@@ -19,7 +19,9 @@ const W_COMPACTO = { w: 340, h: 64 }, W_EXPANDIDO = { w: 340, h: 460 };
 let win: BrowserWindow;
 let store: Store;
 let cfg: ReturnType<Store['load']>;
-let reader: HudReader;
+let reader: HudReader | undefined;
+let ocrErro = '';
+const OCR_MSG = 'Leitura da tela indisponível (falha ao preparar o OCR — verifique a conexão). Tentando de novo…';
 let data: SourceData[] = [];
 let tracker = createTracker(() => undefined);
 let estado: Estado | null = null;
@@ -62,6 +64,7 @@ function emit() {
   if (!win || win.isDestroyed()) return;
   const vm = buildViewModel({
     estado, lib: lib(), fontes: data.map((d) => d.source), feitas: new Set(cfg.questsFeitas), lim: cfg.limiares,
+    avisosExtras: ocrErro ? [ocrErro] : [],
     ...flags, precisaWizard: !cfg.gamePath, opacidade: cfg.opacidade, expandido: cfg.janela.expandido,
     sync: { auto: cfg.autoSync, guias: data.filter((d) => d.source.auto).length, ...syncInfo },
   });
@@ -70,7 +73,7 @@ function emit() {
 
 async function captureGame(): Promise<Img | null> {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1080 } });
-  const s = srcs.find((x) => /maple/i.test(x.name) && !/overlay/i.test(x.name));
+  const s = srcs.find((x) => /maplestory/i.test(x.name) && !/overlay/i.test(x.name));
   if (!s) return null;
   const { width, height } = s.thumbnail.getSize();
   return width && height ? bgraToImg(s.thumbnail.toBitmap(), width, height) : null;
@@ -85,7 +88,7 @@ async function tick() {
     flags = { capturaPreta: false, jogoNaoEncontrado: !img };
     if (img) {
       if (isBlack(img)) flags.capturaPreta = true;
-      else {
+      else if (reader) {
         const regions = cfg.regions[resKey(img)] ?? DEFAULT_REGIONS;
         const r = await reader.read(img, regions);
         estado = tracker.push({ ...r, t: Date.now() });
@@ -99,12 +102,17 @@ function createWindow() {
   win = new BrowserWindow({
     title: 'MW Overlay', width: W_COMPACTO.w, height: W_COMPACTO.h, x: cfg.janela.x, y: cfg.janela.y,
     frame: false, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
   });
+  const wc = win.webContents;
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  wc.on('will-navigate', (e) => e.preventDefault());
+  wc.on('will-frame-navigate', (e) => e.preventDefault());
+  wc.on('will-attach-webview', (e) => e.preventDefault());
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setOpacity(cfg.opacidade);
   win.loadFile(path.join(__dirname, 'index.html'));
-  win.on('moved', () => { const [x, y] = win.getPosition(); cfg.janela.x = x; cfg.janela.y = y; store.save(cfg); });
+  win.on('moved', () => { const [x, y] = win.getPosition(); cfg.janela.x = x; cfg.janela.y = y; scheduleSave(); });
   applySize(cfg.janela.expandido);
 }
 function applySize(expandido: boolean) {
@@ -112,6 +120,17 @@ function applySize(expandido: boolean) {
   win.setSize(s.w, s.h);
   cfg.janela.expandido = expandido;
 }
+
+// salvamento com debounce (500 ms) para eventos frequentes (mover janela, opacidade)
+let saveTimer: NodeJS.Timeout | undefined;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { saveTimer = undefined; store.save(cfg); }, 500);
+}
+function flushSave() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; store.save(cfg); }
+}
+const isDir = (p: string) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
 // o renderer não é confiável: todo handler captura erros e valida argumentos
 function handle<R>(ch: string, fallback: R, fn: (...a: unknown[]) => R | Promise<R>) {
@@ -144,7 +163,8 @@ function registerIpc() {
   });
   handle<void>('win:expand', undefined, (b) => { applySize(!!b); store.save(cfg); });
   handle<void>('win:opacity', undefined, (n) => {
-    cfg.opacidade = Math.min(1, Math.max(0.3, Number(n) || 1)); win.setOpacity(cfg.opacidade); store.save(cfg);
+    if (typeof n !== 'number' || !Number.isFinite(n)) return;
+    cfg.opacidade = Math.min(1, Math.max(0.3, n)); win.setOpacity(cfg.opacidade); scheduleSave();
   });
   handle<string | null>('wiz:folder', null, async () => {
     const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], defaultPath: 'C:\\Nexon\\Library\\maplestorycw' });
@@ -162,25 +182,46 @@ function registerIpc() {
     return { dataUrl: 'data:image/jpeg;base64,' + buf.toString('base64'), w: im.w, h: im.h };
   });
   handle<void>('wiz:save', undefined, (key, regions, gamePath) => {
-    if (typeof key !== 'string' || !validResKey(key) || !validRegions(regions) || typeof gamePath !== 'string') return;
+    if (typeof key !== 'string' || !validResKey(key) || !validRegions(regions) || !validGamePathShape(gamePath) || !(gamePath === '' || isDir(gamePath))) return;
     cfg.regions[key] = regions; cfg.gamePath = gamePath; store.save(cfg); emit();
   });
+}
+
+process.on('unhandledRejection', (e) => console.error('unhandledRejection', e));
+process.on('uncaughtException', (e) => console.error('uncaughtException', e));
+
+let retryTimer: NodeJS.Timeout | undefined;
+async function initReader() {
+  try {
+    // MW_FORCE_OCR_FAIL=1: só para o smoke test da falha de OCR
+    if (process.env.MW_FORCE_OCR_FAIL) throw new Error('MW_FORCE_OCR_FAIL');
+    reader = await HudReader.create(path.join(app.getPath('userData'), 'tessdata'));
+    ocrErro = '';
+    clearInterval(retryTimer); retryTimer = undefined;
+    emit();
+  } catch (e) {
+    console.error('OCR indisponível, nova tentativa em 30 s', e);
+    ocrErro = OCR_MSG;
+    emit();
+    retryTimer ??= setInterval(() => { void initReader(); }, 30_000);
+  }
 }
 
 app.whenReady().then(async () => {
   store = new Store(app.getPath('userData'));
   cfg = store.load();
-  reader = await HudReader.create(path.join(app.getPath('userData'), 'tessdata'));
   registerIpc();
   createWindow();
-  await loadAll().catch((e) => console.error('loadAll', e));
-  globalShortcut.register('Ctrl+Alt+M', () => (win.isVisible() ? win.hide() : win.show()));
+  void loadAll().then(emit).catch((e) => console.error('loadAll', e));
+  const reg = (k: string, f: () => void) => { if (!globalShortcut.register(k, f)) console.warn('atalho não registrado:', k); };
+  reg('Ctrl+Alt+M', () => (win.isVisible() ? win.hide() : win.show()));
   let through = false;
-  globalShortcut.register('Ctrl+Alt+C', () => { through = !through; win.setIgnoreMouseEvents(through, { forward: true }); });
+  reg('Ctrl+Alt+C', () => { through = !through; win.setIgnoreMouseEvents(through, { forward: true }); });
   setInterval(tick, TICK_MS);
   // não empilha sincronização: pula se já há carga em andamento
   setInterval(() => { if (cfg.autoSync && !loading) loadAll().then(emit).catch((e) => console.error('sync', e)); }, SYNC_INTERVALO_MS);
-  tick();
+  await initReader();
+  void tick();
 }).catch((e) => { console.error('startup', e); app.quit(); });
-app.on('will-quit', () => { globalShortcut.unregisterAll(); void reader?.close(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); flushSave(); void reader?.close(); });
 app.on('window-all-closed', () => app.quit());

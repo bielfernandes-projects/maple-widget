@@ -4,7 +4,7 @@ import type { Estado, Library, Limiares, Source, SyncInfo, ViewModel } from './t
 export type VMInput = {
   estado: Estado | null; lib: Library; fontes: Source[]; feitas: Set<string>; lim: Limiares;
   capturaPreta: boolean; jogoNaoEncontrado: boolean; precisaWizard: boolean;
-  opacidade: number; expandido: boolean; sync: SyncInfo;
+  opacidade: number; expandido: boolean; sync: SyncInfo; avisosExtras?: string[];
 };
 
 export function buildViewModel(i: VMInput): ViewModel {
@@ -18,6 +18,8 @@ export function buildViewModel(i: VMInput): ViewModel {
   if (e?.semLeitura) avisos.push('Sem leitura da HUD agora (mantendo último valor).');
   const comErro = i.fontes.filter((f) => f.status === 'erro').length;
   if (comErro) avisos.push(comErro === 1 ? '1 fonte com erro (usando cache)' : `${comErro} fontes com erro (usando cache)`);
+
+  if (i.avisosExtras) avisos.push(...i.avisosExtras);
 
   const dicas = e ? dicasPara(lib.tips, e.level, e.classe) : [];
   return {

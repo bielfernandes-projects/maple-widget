@@ -93,3 +93,12 @@ describe('buildViewModel', () => {
 function F(title: string, status: 'ok' | 'erro'): Source {
   return { url: 'u', title, fetchedAt: 0, status, counts: { maps: 0, quests: 0, expRows: 0, tips: 0 } };
 }
+
+describe('avisosExtras', () => {
+  it('anexa extras ao final de avisos; omitir nao muda nada', () => {
+    const a = buildViewModel({ ...base, estado: est() });
+    const b = buildViewModel({ ...base, estado: est(), avisosExtras: ['x', 'y'] });
+    expect(b.avisos).toEqual([...a.avisos, 'x', 'y']);
+    expect(buildViewModel({ ...base, estado: est(), avisosExtras: [] }).avisos).toEqual(a.avisos);
+  });
+});

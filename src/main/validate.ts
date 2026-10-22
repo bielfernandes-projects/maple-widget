@@ -18,3 +18,6 @@ export function validRegions(x: unknown): x is Regions {
     return isObj(r) && exactKeys(r, RECT_KEYS) && RECT_KEYS.every((p) => typeof r[p] === 'number' && Number.isFinite(r[p]) && (r[p] as number) >= 0 && (r[p] as number) <= 1);
   });
 }
+
+// só o formato (string, <= 500); a checagem de diretório existente fica no main
+export const validGamePathShape = (s: unknown): s is string => typeof s === 'string' && s.length <= 500;
