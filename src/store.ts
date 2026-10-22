@@ -17,8 +17,21 @@ export class Store {
   private file: string;
   constructor(dir: string) { fs.mkdirSync(dir, { recursive: true }); this.file = path.join(dir, 'config.json'); }
   load(): Config {
-    try { return { ...DEFAULT_CONFIG, ...JSON.parse(fs.readFileSync(this.file, 'utf8')) }; }
-    catch { return structuredClone(DEFAULT_CONFIG); }
+    try {
+      const saved = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      if (typeof saved !== 'object' || saved === null || Array.isArray(saved)) return structuredClone(DEFAULT_CONFIG);
+      return {
+        ...DEFAULT_CONFIG,
+        ...saved,
+        janela: { ...DEFAULT_CONFIG.janela, ...saved.janela },
+        limiares: { ...DEFAULT_CONFIG.limiares, ...saved.limiares },
+      };
+    } catch { return structuredClone(DEFAULT_CONFIG); }
   }
-  save(c: Config) { fs.writeFileSync(this.file, JSON.stringify(c, null, 2)); }
+  save(c: Config) {
+    // escrita atômica: grava em .tmp e renomeia
+    const tmp = this.file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(c, null, 2));
+    fs.renameSync(tmp, this.file);
+  }
 }
