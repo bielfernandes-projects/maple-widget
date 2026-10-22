@@ -1,0 +1,67 @@
+export type Img = { w: number; h: number; data: Uint8ClampedArray }; // RGBA
+export type Region = { x: number; y: number; w: number; h: number }; // normalizado 0..1
+export type Regions = { level: Region; exp: Region; cls: Region; map: Region };
+
+export type Reading = {
+  level?: number; expAbs?: number; expPct?: number;
+  map?: string; cls?: string; t: number;
+};
+export type Estado = {
+  level: number; classe?: string; expAbs: number; expPct: number;
+  mapa?: string; expPorHora: number; upou: boolean; semLeitura: boolean;
+};
+
+export type Mob = { name: string; id?: string; iconUrl?: string };
+export type GrindMap = {
+  name: string; street: string; maxExpHr: number; mob: Mob; why: string;
+  levelMin: number; levelMax: number; sourceUrl: string;
+};
+export type Quest = {
+  id: string; name: string; npc: string; level: number; exp: number;
+  reward: string; iconUrl?: string; sourceUrl: string;
+};
+export type ExpRow = { level: number; toNext: number };
+export type Tip = {
+  kind: 'ap' | 'sp'; title: string; text: string;
+  levelMin?: number; levelMax?: number; sourceUrl: string;
+};
+export type ParsedGuide = {
+  title: string; maps: GrindMap[]; quests: Quest[]; expRows: ExpRow[]; tips: Tip[];
+};
+
+export type Source = {
+  url: string; title: string; fetchedAt: number;
+  status: 'ok' | 'erro' | 'vazio'; error?: string;
+  counts: { maps: number; quests: number; expRows: number; tips: number };
+};
+export type SourceData = ParsedGuide & { source: Source };
+export type Library = { maps: GrindMap[]; quests: Quest[]; expRows: ExpRow[]; tips: Tip[] };
+
+export type Limiares = { verde: number; amarelo: number };
+export type Veredito = { cor: 'verde' | 'amarelo' | 'vermelho' | 'cinza'; pct: number | null; ref?: GrindMap };
+
+export type Config = {
+  gamePath: string;
+  regions: Record<string, Regions>;
+  sources: string[];
+  dominios: string[];
+  limiares: Limiares;
+  questsFeitas: string[];
+  opacidade: number;
+  janela: { x?: number; y?: number; expandido: boolean };
+};
+
+export type ViewModel = {
+  estado: Estado | null;
+  veredito: Veredito;
+  mapas: GrindMap[];
+  quests: Quest[];
+  dicas: Tip[];
+  levelUp?: { de: number; para: number; dicas: Tip[]; novidades: { maps: GrindMap[]; quests: Quest[] } };
+  fontes: Source[];
+  avisos: string[];
+  capturaPreta: boolean;
+  precisaWizard: boolean;
+  opacidade: number;
+  expandido: boolean;
+};

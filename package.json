@@ -1,0 +1,40 @@
+{
+  "name": "maple-widget",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && electron .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "dist": "node build.mjs && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "dev.maplewidget",
+    "productName": "Maple Widget",
+    "files": [
+      "dist/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/tesseract.js-core/**"
+    ]
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pngjs": "^6.0.5",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
