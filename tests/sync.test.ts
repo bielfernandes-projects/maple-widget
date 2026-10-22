@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseSitemap } from '../src/sources/discover';
 import { syncAuto } from '../src/sources/sync';
+import { loadSource, readCache } from '../src/sources/load';
 import { Store } from '../src/store';
 
 const SITEMAP = 'https://meowdb.com/msclassic/sitemap.xml';
@@ -174,5 +175,37 @@ describe('syncAuto robustez', () => {
   it('(h) manual que não é array não lança', async () => {
     const r = await syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: tmp(), manual: undefined as any, fetchFn: net({ a: '1', b: '1' }).f });
     expect(r.data.length).toBe(2);
+  });
+});
+
+describe('cache com formato inválido', () => {
+  const U = 'https://meowdb.com/msclassic/guides/g-a';
+  const cf = (dir: string, u: string) => path.join(dir, createHash('sha1').update(u).digest('hex') + '.json');
+  const off = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+
+  it('(i) cache {} offline: não lança e guia ausente', async () => {
+    const dir = tmp(); fs.writeFileSync(cf(dir, U), '{}');
+    const r = await run(dir, off, [U]);
+    expect(r.offline).toBe(true);
+    expect(r.data.some((d) => d.source.url === U)).toBe(false);
+  });
+  it('(ii) cache {} online: baixa de novo', async () => {
+    const dir = tmp(); fs.writeFileSync(cf(dir, U), '{}');
+    const r = await run(dir, net({ a: '1', b: '1' }).f, [U]);
+    expect(r.data.find((d) => d.source.url === U)?.source.status).toBe('ok');
+  });
+  it('(iii) readCache rejeita formatos inválidos e lê cache real', async () => {
+    const dir = tmp();
+    for (const bad of ['[]', '42', '{"source":{"url":5}}', '{"source":{"url":"u","status":"ok"}}']) {
+      fs.writeFileSync(cf(dir, U), bad);
+      expect(readCache(dir, U)).toBeUndefined();
+    }
+    await loadSource(U, { dominios: D, cacheDir: dir, fetchFn: net({ a: '1', b: '1' }).f });
+    expect(readCache(dir, U)?.source.url).toBe(U);
+  });
+  it('(iv) rede de segurança: cacheDir inválido não rejeita', async () => {
+    const r = await syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: null as any, manual: [], fetchFn: net({ a: '1', b: '1' }).f });
+    expect(r.data).toEqual([]);
+    expect(r.offline).toBe(true);
   });
 });

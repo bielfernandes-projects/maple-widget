@@ -25,7 +25,13 @@ function writeCache(dir: string, file: string, data: SourceData) {
 
 // Cache ausente ou corrompido equivale a "sem cache".
 export function readCache(cacheDir: string, url: string): SourceData | undefined {
-  try { return JSON.parse(fs.readFileSync(cacheFile(cacheDir, url), 'utf8')); } catch { return undefined; }
+  try {
+    const j = JSON.parse(fs.readFileSync(cacheFile(cacheDir, url), 'utf8'));
+    const obj = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
+    if (!obj(j) || !obj(j.source) || typeof j.source.url !== 'string' || typeof j.source.status !== 'string') return undefined;
+    if (!['maps', 'quests', 'expRows', 'tips'].every((k) => Array.isArray(j[k]))) return undefined;
+    return j;
+  } catch { return undefined; }
 }
 
 export async function loadSource(url: string, o: Opts): Promise<SourceData> {

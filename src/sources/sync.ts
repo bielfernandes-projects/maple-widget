@@ -10,7 +10,12 @@ const CONCURRENCIA = 3;
 export type SyncOpts = { sitemapUrl: string; dominios: string[]; cacheDir: string; manual: string[]; fetchFn?: typeof fetch };
 export type SyncResult = { data: SourceData[]; descobertos: number; atualizados: number; offline: boolean };
 
+// Roda a cada 30 min no main: nunca pode rejeitar.
 export async function syncAuto(o: SyncOpts): Promise<SyncResult> {
+  try { return await run(o); } catch { return { data: [], descobertos: 0, atualizados: 0, offline: true }; }
+}
+
+async function run(o: SyncOpts): Promise<SyncResult> {
   try { fs.mkdirSync(o.cacheDir, { recursive: true }); } catch { /* ignora */ }
   const indexFile = path.join(o.cacheDir, 'auto-index.json');
   let refs: GuideRef[];
