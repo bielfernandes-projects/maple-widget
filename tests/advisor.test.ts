@@ -37,6 +37,26 @@ describe('advisor', () => {
     expect(dicasPara(tips, 13, undefined).map((t) => t.guide)).toEqual(['Bowman Build Guide', 'Warrior Build Guide', 'Beginner Guide']);
     expect(dicasPara(tips, 45, 'Hunter').map((t) => t.guide)).toEqual(['Beginner Guide', 'Hunter Class Guide']);
   });
+  it('dicasPara nunca lança para classe lida (texto de OCR não confiável)', () => {
+    const tips = [
+      T('Bowman Build Guide', 'Ability Points', 1, 30),
+      T('Beginner Guide', 'Ability Points allocation'),
+    ];
+    for (const classe of ['Archer(', '[Archer', '*', '\\', 'constructor', 'toString', '__proto__', '', '   ']) {
+      expect(Array.isArray(dicasPara(tips, 13, classe))).toBe(true);
+    }
+  });
+  it('dicasPara ignora espaços e caixa da classe lida', () => {
+    const tips = [
+      T('Bowman Build Guide', 'Ability Points', 1, 30),
+      T('Warrior Build Guide', 'Ability Points'),
+      T('Beginner Guide', 'Ability Points allocation'),
+    ];
+    const esperado = ['Bowman Build Guide', 'Beginner Guide'];
+    expect(dicasPara(tips, 13, 'Archer').map((t) => t.guide)).toEqual(esperado);
+    expect(dicasPara(tips, 13, ' Archer ').map((t) => t.guide)).toEqual(esperado);
+    expect(dicasPara(tips, 13, 'ARCHER').map((t) => t.guide)).toEqual(esperado);
+  });
   it('novidadesNoLevel: o que começa exatamente neste level', () => {
     const n = novidadesNoLevel([M('a', 14, 18, 1), M('b', 11, 15, 1)], [Q('x', 14, 1), Q('y', 13, 1)], 14);
     expect(n.maps.map((m) => m.name)).toEqual(['a']);

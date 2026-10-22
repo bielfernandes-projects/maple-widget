@@ -21,7 +21,7 @@ export function questsParaLevel(quests: Quest[], level: number, feitas: Set<stri
 }
 
 export function dicasPara(tips: Tip[], level: number, classe?: string): Tip[] {
-  const c = classe?.toLowerCase();
+  const c = classe?.trim().toLowerCase() || undefined; // classe vem de OCR: vazia ou só espaços = sem filtro
   return tips.filter((t) => {
     const faixa = (t.levelMin === undefined || level >= t.levelMin) && (t.levelMax === undefined || level <= t.levelMax);
     return faixa && (!c || classeCompativel(`${t.guide} ${t.title}`, c)); // sem classe lida, não filtra por classe
@@ -35,10 +35,12 @@ const LINHAGEM: Record<string, string[]> = {
   fighter: ['fighter', 'warrior'], spearman: ['spearman', 'warrior'], page: ['page', 'warrior'],
   assassin: ['assassin', 'thief'], bandit: ['bandit', 'thief'], cleric: ['cleric', 'magician'],
 };
-const cita = (texto: string, k: string) => new RegExp(`\\b${k}\\b`).test(texto);
+const escapa = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const cita = (texto: string, k: string) => new RegExp(`\\b${escapa(k)}\\b`).test(texto);
 function classeCompativel(guia: string, classe: string): boolean {
   const g = guia.toLowerCase();
-  if ((LINHAGEM[classe] ?? [classe]).some((k) => cita(g, k))) return true;
+  const chaves = Object.hasOwn(LINHAGEM, classe) ? LINHAGEM[classe] : [classe];
+  if (chaves.some((k) => cita(g, k))) return true;
   return !CLASSES.some((k) => cita(g, k));
 }
 
