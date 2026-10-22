@@ -1547,7 +1547,116 @@ git add -A && git commit -m "feat: viewmodel puro com avisos e cartão de level 
 
 ---
 
-### Task 10: Shell Electron (main, preload, loop de captura)
+### Task 10: Fonte de quests (Quest Database do meowdb)
+
+Motivação (medida em 2026-10-22 com os 34 guias reais): os guias só trazem 10 quests, todas da Ilha Maple (Lv 1–5), então "melhores quests para o meu level" ficaria vazio no Lv 13. A fonte certa é a página `https://meowdb.com/msclassic/quest-tracker/all`: HTML renderizado no servidor (~1 MB) com **uma tabela de ~684 quests**, cabeçalhos `(ícone NPC) | Quest | Level ↑ | Area | Start NPC | EXP | Mesos | Rewards`, linhas como `+ Bringing a Mirror to Heena | 0 | Maple Island | Sera | 2 | 0 | -`; os nomes vêm com o prefixo `+ ` (expansor) e as linhas não têm link com ID.
+
+**Files:**
+- Create: `scripts/make-quest-fixture.mjs`, `tests/fixtures/guides/quest-database.html` (fixture reduzida, gerada pelo script)
+- Modify: `src/types.ts` (`Quest` ganha `area?: string`; `Config` ganha `fontesFixas: string[]`), `src/store.ts` (`DEFAULT_CONFIG.fontesFixas = ['https://meowdb.com/msclassic/quest-tracker/all']`), `src/sources/parser.ts` (classificação e leitura de quests), `src/sources/sync.ts` (novo parâmetro `fixas`), `tests/parser.test.ts`, `tests/sync.test.ts`
+
+**Interfaces:**
+- Consumes: `parseGuide`, `syncAuto`, `Quest`, `Config` (Tasks 1, 6, 8).
+- Produces: `syncAuto(o: { ...; manual: string[]; fixas?: string[] })` — URLs "fixas" são tratadas como automáticas (`source.auto = true`) e reverificadas por TTL de 6 h (não há `lastmod` no sitemap para elas); `Quest.area?: string`; `Config.fontesFixas`.
+
+- [ ] **Step 1: Fixture reduzida**
+
+`scripts/make-quest-fixture.mjs` (baixa a página real e guarda só o cabeçalho + as 40 primeiras linhas, em HTML mínimo):
+```js
+import fs from 'node:fs';
+import * as cheerio from 'cheerio';
+
+const r = await fetch('https://meowdb.com/msclassic/quest-tracker/all', { headers: { 'user-agent': 'maple-widget/0.1 (fixture)' } });
+if (!r.ok) throw new Error(`HTTP ${r.status}`);
+const $ = cheerio.load(await r.text());
+const rows = $('table').first().find('tr').toArray();
+const keep = rows.slice(0, 41).map((tr) => $.html(tr)).join('\n');
+fs.mkdirSync('tests/fixtures/guides', { recursive: true });
+fs.writeFileSync('tests/fixtures/guides/quest-database.html',
+  `<!doctype html><html><body><main><h1>Quest Database</h1><table>${keep}</table></main></body></html>`);
+console.log('ok:', rows.length - 1, 'linhas na página; 40 guardadas');
+```
+Run: `node scripts/make-quest-fixture.mjs` → cria o arquivo (< 60 KB). Se a página mudar de estrutura, inspecione antes de seguir.
+
+- [ ] **Step 2: Testes que falham**
+
+Em `tests/parser.test.ts` acrescentar (com `parseGuide` já importado; importar `fs` e `path` se ainda não estiverem):
+```ts
+describe('parseGuide — Quest Database', () => {
+  const url = 'https://meowdb.com/msclassic/quest-tracker/all';
+  const html = `<main><h1>Quest Database</h1><table>
+    <tr><th>Start NPC</th><th>Quest</th><th>Level ↑</th><th>Area</th><th>Start NPC</th><th>EXP</th><th>Mesos</th><th>Rewards</th></tr>
+    <tr><td></td><td>+ Bringing a Mirror to Heena</td><td>0</td><td>Maple Island</td><td>Sera</td><td>2</td><td>0</td><td>-</td></tr>
+    <tr><td></td><td>+ Mai's Training</td><td>13</td><td>Henesys</td><td>Mai</td><td>1,200</td><td>500</td><td>20x Egg</td></tr>
+    <tr><td></td><td>+ Mai's Training</td><td>13</td><td>Ellinia</td><td>Other Mai</td><td>7</td><td>0</td><td>-</td></tr>
+  </table></main>`;
+
+  it('lê quests da tabela do Quest Database', () => {
+    const g = parseGuide(html, url);
+    expect(g.quests.length).toBe(3);
+    expect(g.quests[0]).toMatchObject({ name: 'Bringing a Mirror to Heena', level: 0, area: 'Maple Island', npc: 'Sera', exp: 2, reward: '' });
+    expect(g.quests[1]).toMatchObject({ name: "Mai's Training", level: 13, area: 'Henesys', npc: 'Mai', exp: 1200, reward: '20x Egg' });
+  });
+  it('ids únicos mesmo sem link (nome + NPC)', () => {
+    const ids = parseGuide(html, url).quests.map((q) => q.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+  it('a tabela de EXP por level continua sendo reconhecida como EXP, não como quests', () => {
+    const g = parseGuide('<main><h1>t</h1><table><tr><th>Level</th><th>EXP to next</th></tr><tr><td>1</td><td>15</td></tr></table></main>', url);
+    expect([g.quests.length, g.expRows.length]).toEqual([0, 1]);
+  });
+  it('fixture real reduzida: >= 35 quests com nome limpo, level e EXP numéricos', () => {
+    const real = fs.readFileSync(path.join(__dirname, 'fixtures/guides/quest-database.html'), 'utf8');
+    const g = parseGuide(real, url);
+    expect(g.quests.length).toBeGreaterThanOrEqual(35);
+    expect(g.quests.every((q) => q.name && !q.name.startsWith('+') && Number.isFinite(q.level) && Number.isFinite(q.exp))).toBe(true);
+    expect(g.quests.some((q) => q.area)).toBe(true);
+  });
+});
+```
+Em `tests/sync.test.ts` acrescentar testes para `fixas` (reutilizando os helpers `net`, `run`, `tmp` já existentes; `run` precisa aceitar `fixas` — estender a assinatura do helper):
+(a) um URL fixo fora do sitemap é baixado na 1ª sync com `source.auto === true`, **não** é rebaixado na 2ª sync, e é rebaixado de novo quando o `source.fetchedAt` do arquivo de cache é reescrito para 7 h atrás;
+(b) um URL fixo que também está no sitemap não é duplicado em `data`;
+(c) `fixas` não-array (`undefined as any`, `42 as any`) ou com entradas vazias/não-string não lança e é ignorado.
+
+- [ ] **Step 3: Rodar e ver falhar**
+
+Run: `npx vitest run tests/parser.test.ts tests/sync.test.ts` → FAIL nos testes novos (os antigos continuam passando).
+
+- [ ] **Step 4: Implementar**
+
+Tipos/config: em `src/types.ts` → `Quest` ganha `area?: string;` e `Config` ganha `fontesFixas: string[];`; em `src/store.ts` → `fontesFixas: ['https://meowdb.com/msclassic/quest-tracker/all'],` em `DEFAULT_CONFIG` (a mesclagem existente de `Store.load()` já preenche o default para configs antigas).
+
+Parser (`src/sources/parser.ts`), só o ramo de quests e o `iLv`:
+- reconhecer a coluna de level por `h === 'lv' || h.startsWith('level')`;
+- coluna do NPC = a **última** coluna cujo cabeçalho seja `from` ou `start npc` (a primeira "Start NPC" da tabela é só o ícone);
+- recompensa: `col((h) => h.startsWith('reward'))`; `'-'` vira `''`;
+- `name` sem o prefixo `+` e espaços (`.replace(/^\+\s*/, '').trim()`);
+- `area`: coluna `area` (se existir);
+- `id`: o ID do link `/quest-tracker/<n>` se existir; senão `${name}|${npc}`;
+- manter a regra existente de pular linhas sem nome e o `num()` atual (`"1,200"` → 1200).
+Garantir que a classificação da tabela de EXP (`level` + `exp to next`) e a de mapas (`map` + `max exp…`) continuam com a precedência atual e **não** capturam esta tabela.
+
+Sync (`src/sources/sync.ts`): `SyncOpts` ganha `fixas?: string[]`; sanear como `manual` (array de strings não vazias, senão `[]`); `urls = [...refs, ...fixas, ...manual]` sem duplicatas; `auto` da fonte = `!!ref || fixas.includes(url)`; a reverificação das URLs que não estão no sitemap (fixas e manuais) continua sendo por TTL de 6 h sobre `fetchedAt` (a lógica atual já cobre `!ref`; apenas passe o flag `auto` correto ao `loadSource` e ao devolver o cache).
+
+- [ ] **Step 5: Rodar e ver passar**
+
+Run: `npx vitest run tests/parser.test.ts tests/sync.test.ts tests/sources.test.ts` → PASS.  
+Run: `npx tsc --noEmit` e `npx vitest run` → sem erros.
+
+- [ ] **Step 6: Verificação com dados reais (manual, não é teste automatizado)**
+
+Com internet, rodar um script descartável (fora do repositório) que chama `syncAuto` com `fixas: ['https://meowdb.com/msclassic/quest-tracker/all']` e um `cacheDir` temporário e imprime: o número de quests (esperado > 600), os 5 maiores de `questsParaLevel(quests, 13, new Set())` (esperado: lista **não vazia**) e se a 2ª sync faz só 1 requisição (o sitemap). Anotar os números no relatório. Se a página tiver mudado e a contagem for baixa, parar e reportar.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A && git commit -m "feat: fonte de quests do Quest Database do meowdb"
+```
+
+---
+
+### Task 11: Shell Electron (main, preload, loop de captura)
 
 **Files:**
 - Create: `build.mjs`, `src/main/main.ts`, `src/main/preload.ts`, `src/renderer/api.d.ts`
@@ -1675,7 +1784,7 @@ function rebuildTracker() {
 }
 async function loadAll() {
   if (cfg.autoSync) {
-    const r = await syncAuto({ sitemapUrl: cfg.sitemapUrl, dominios: cfg.dominios, cacheDir: cacheDir(), manual: cfg.sources });
+    const r = await syncAuto({ sitemapUrl: cfg.sitemapUrl, dominios: cfg.dominios, cacheDir: cacheDir(), manual: cfg.sources, fixas: cfg.fontesFixas });
     data = r.data;
     syncInfo = { ultima: Date.now(), offline: r.offline };
   } else {
@@ -1803,7 +1912,7 @@ Nota: o flag `upou` do `Estado` vale só para um `push` do tracker; o renderer g
 
 - [ ] **Step 5: Verificar build e typecheck**
 
-Run: `npx tsc --noEmit` → sem erros. Run: `node build.mjs` → gera `dist/main.js`, `preload.js` (renderer ainda falha até a Task 11; criar stubs vazios `src/renderer/renderer.ts`, `index.html`, `styles.css` se necessário para o build passar).
+Run: `npx tsc --noEmit` → sem erros. Run: `node build.mjs` → gera `dist/main.js`, `preload.js` (renderer ainda falha até a Task 12; criar stubs vazios `src/renderer/renderer.ts`, `index.html`, `styles.css` se necessário para o build passar).
 
 - [ ] **Step 6: Commit**
 
@@ -1813,14 +1922,14 @@ git add -A && git commit -m "feat: shell electron com captura, OCR, IPC e hotkey
 
 ---
 
-### Task 11: UI do widget (renderer)
+### Task 12: UI do widget (renderer)
 
 **Files:**
 - Create: `src/renderer/index.html`, `src/renderer/styles.css`, `src/renderer/renderer.ts`
 
 **Interfaces:**
-- Consumes: `window.api` (Task 10), `ViewModel`.
-- Produces: `startWizard(onDone: () => void): void` é consumido da Task 12 (`src/renderer/wizard.ts`); aqui apenas importar e chamar quando `vm.precisaWizard`.
+- Consumes: `window.api` (Task 11), `ViewModel`.
+- Produces: `startWizard(onDone: () => void): void` é consumido da Task 13 (`src/renderer/wizard.ts`); aqui apenas importar e chamar quando `vm.precisaWizard`.
 
 - [ ] **Step 1: `src/renderer/index.html`**
 
@@ -1949,7 +2058,7 @@ function mapRow(m: GrindMap) {
 }
 function questRow(q: Quest) {
   return h('div', { class: 'row' }, icon(q.iconUrl),
-    h('div', { class: 't' }, h('b', null, q.name), h('span', { class: 'm' }, `${q.npc} · Lv ${q.level} · ${q.exp} EXP${q.reward ? ' · ' + q.reward : ''}`)),
+    h('div', { class: 't' }, h('b', null, q.name), h('span', { class: 'm' }, `${q.npc}${q.area ? ' · ' + q.area : ''} · Lv ${q.level} · ${q.exp} EXP${q.reward ? ' · ' + q.reward : ''}`)),
     h('button', { onclick: () => void window.api.toggleQuest(q.id) }, '✓'));
 }
 const empty = (t: string) => h('div', { class: 'empty' }, t);
@@ -2010,7 +2119,7 @@ Nota: o `onVM` chama `render()` a cada 2 s; o guard `activeElement instanceof HT
 
 - [ ] **Step 4: Stub temporário do wizard para compilar**
 
-Criar `src/renderer/wizard.ts` com `export function startWizard(onDone: () => void) { onDone(); }` (substituído na Task 12).
+Criar `src/renderer/wizard.ts` com `export function startWizard(onDone: () => void) { onDone(); }` (substituído na Task 13).
 
 - [ ] **Step 5: Verificar**
 
@@ -2025,7 +2134,7 @@ git add -A && git commit -m "feat: ui do widget (compacto/expandido, abas, cart�
 
 ---
 
-### Task 12: Assistente de primeira execução (calibração)
+### Task 13: Assistente de primeira execução (calibração)
 
 **Files:**
 - Modify: `src/renderer/wizard.ts` (substituir stub)
@@ -2140,7 +2249,7 @@ git add -A && git commit -m "feat: assistente de primeira execução com calibra
 
 ---
 
-### Task 13: Empacotar e validar nos modos de janela
+### Task 14: Empacotar e validar nos modos de janela
 
 **Files:**
 - Modify: `package.json` (já tem script `dist` e `build`)
@@ -2176,7 +2285,7 @@ git add -A && git commit -m "chore: empacotamento portable e checklist de valida
 
 ## Self-Review (feito contra a spec)
 
-- **Cobertura:** capture/OCR (T2–T3), tracker (T4), advisor com dicas por classe (T5), parser (T6), allowlist/cache/config (T7), descoberta e sincronização automática de guias por sitemap/lastmod (T8), viewmodel e avisos (T9), janela/captura/IPC/hotkeys/click-through/opacidade/posição/timer de sync (T10), UI compacto/expandido/abas/level up/fontes+sync (T11), assistente 3 passos (T12), empacotamento e validação dos modos e da sync (T13). Erros: cache offline (T7/T8), OCR implausível (T4), captura preta (T9/T10), sem fontes (T9/T11).
+- **Cobertura:** capture/OCR (T2–T3), tracker com confirmação de leituras suspeitas (T4), advisor com dicas por classe e ordenadas por relevância (T5), parser (T6), allowlist/cache/config (T7), descoberta e sincronização automática de guias por sitemap/lastmod (T8), viewmodel e avisos (T9), fonte de quests do Quest Database (T10), janela/captura/IPC/hotkeys/click-through/opacidade/posição/timer de sync (T11), UI compacto/expandido/abas/level up/fontes+sync (T12), assistente 3 passos (T13), empacotamento e validação dos modos e da sync (T14). Erros: cache offline (T7/T8), OCR implausível (T4), captura preta (T9/T11), sem fontes (T9/T12).
 - **Desvios declarados** em *Global Constraints*: ícones sem cache próprio em disco; level up por subida do level lido.
 - **Consistência de tipos:** `Reading`, `Estado`, `ViewModel`, `Library`, `SourceData` definidos na T1 e usados com os mesmos nomes nas demais. `HudReader.read` retorna `Omit<Reading,'t'>` e o main acrescenta `t`.
-- **Riscos abertos (de propósito):** calibração fina das regiões e do predicado de cor do level (T3, passos 5–9); nome da janela do jogo para `desktopCapturer` (regex `/maple/i`, ajustar se o título real for diferente); comportamento em tela cheia exclusiva (T13).
+- **Riscos abertos (de propósito):** calibração fina das regiões e do predicado de cor do level (T3, passos 5–9); nome da janela do jogo para `desktopCapturer` (regex `/maple/i`, ajustar se o título real for diferente); comportamento em tela cheia exclusiva (T14).
