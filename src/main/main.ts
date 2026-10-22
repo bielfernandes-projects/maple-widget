@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { HudReader, DEFAULT_REGIONS } from '../capture/hud';
@@ -10,7 +10,7 @@ import { loadSource } from '../sources/load';
 import { syncAuto } from '../sources/sync';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { validGamePathShape, validRegions, validResKey } from './validate';
+import { validGamePathShape, validOpenUrl, validRegions, validResKey } from './validate';
 import type { Estado, Img, Library, SourceData } from '../types';
 
 const TICK_MS = 2000;
@@ -146,6 +146,10 @@ function registerIpc() {
     cfg.sources.push(url); store.save(cfg);
     await loadAll(); emit();
     return { ok: true };
+  });
+  handle<void>('open:source', undefined, async (url) => {
+    if (!validOpenUrl(url, cfg.dominios)) return;
+    await shell.openExternal(url);
   });
   handle<void>('src:remove', undefined, async (url) => {
     if (typeof url !== 'string') return;

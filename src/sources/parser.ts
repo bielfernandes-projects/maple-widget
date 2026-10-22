@@ -78,9 +78,11 @@ export function parseGuide(html: string, url: string): ParsedGuide {
         if (!range || !txt(iMap) || !num(txt(iExpHr))) continue;
         const iMob = col((h) => h.includes('mob'));
         const mobCell = cells[iMob];
-        const mobId = row.find('a[href]').toArray().map((a) => $(a).attr('href') ?? '')
+        const spriteSrc = mobCell?.find('img').first().attr('src') ?? row.find('img').first().attr('src');
+        const spriteId = spriteSrc?.match(/mob_(\d+)\.png/)?.[1];
+        const mobId = spriteId ?? row.find('a[href]').toArray().map((a) => $(a).attr('href') ?? '')
           .map((h) => h.match(/\/(?:monsters?|mobs?)(?:-db)?\/(\d+)/)?.[1]).find(Boolean);
-        const img = abs(mobCell?.find('img').attr('src'));
+        const img = abs(spriteSrc);
         out.maps.push({
           name: txt(iMap), street: txt(col((h) => h === 'street')), maxExpHr: num(txt(iExpHr)),
           mob: {

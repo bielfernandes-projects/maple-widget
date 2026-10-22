@@ -100,3 +100,18 @@ describe('advisor', () => {
     expect(veredito(500, undefined, LIM).cor).toBe('cinza');
   });
 });
+
+describe('questsParaLevel: variantes', () => {
+  const V = (id: string, name: string, npc: string, exp: number): Quest => ({ id, name, npc, level: 10, exp, reward: '', sourceUrl: 'u' });
+  const tiers = [V('t1', 'Donating', 'Henesys', 9060), V('t2', 'Donating', 'Henesys', 14200), V('t3', 'Donating', 'Henesys', 11400)];
+  it('colapsa tiers no de maior EXP', () => {
+    expect(questsParaLevel(tiers, 10, new Set()).map((q) => q.id)).toEqual(['t2']);
+  });
+  it('feita a de cima, surge a proxima', () => {
+    expect(questsParaLevel(tiers, 10, new Set(['t2'])).map((q) => q.id)).toEqual(['t3']);
+  });
+  it('quests diferentes nao colapsam; empate mantem a primeira', () => {
+    const r = questsParaLevel([V('a', 'A', 'n', 5), V('b', 'B', 'n', 7), V('c', 'A', 'n', 5)], 10, new Set());
+    expect(r.map((q) => q.id)).toEqual(['b', 'a']);
+  });
+});

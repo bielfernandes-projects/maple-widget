@@ -148,3 +148,18 @@ describe('parseGuide — Quest Database: ids e recompensas', () => {
     expect(ids.every((i) => /^\d+$/.test(i))).toBe(true);
   });
 });
+
+describe('mob icon em mapas de grind', () => {
+  const html = `<html><body><h1>G</h1><h2>Levels 10-20</h2><table><tr><th>Map</th><th>Street</th><th>Dominant mob</th><th>Max EXP/hr</th><th>Why</th></tr>
+    <tr><td><img src="/msclassic/monsters/sprites/mob_10.png"/><a href="/msclassic/maps/010003020">Pig Beach</a></td><td>Victoria</td><td>Ribbon Pig (lv10)</td><td>100,000</td><td>w</td></tr></table></body></html>`;
+  it('pega a img da celula do mapa e o id do sprite', () => {
+    const m = parseGuide(html, 'https://meowdb.com/msclassic/guides/g').maps[0];
+    expect(m.mob.iconUrl).toBe('https://meowdb.com/msclassic/monsters/sprites/mob_10.png');
+    expect(m.mob.id).toBe('10');
+  });
+  it('fixture real: todo mapa tem iconUrl', () => {
+    const r = parseGuide(load('best-grind-maps-every-level'), 'https://meowdb.com/msclassic/guides/best-grind-maps-every-level');
+    expect(r.maps.length).toBeGreaterThan(0);
+    expect(r.maps.filter((m) => !m.mob.iconUrl)).toEqual([]);
+  });
+});

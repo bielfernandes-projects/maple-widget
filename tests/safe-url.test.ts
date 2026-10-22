@@ -12,3 +12,10 @@ describe('safeIconUrl', () => {
       expect(safeIconUrl(u as any)).toBeUndefined();
   });
 });
+
+describe('safeIconUrl: bypasses', () => {
+  it.each(['https://meowdb.com@evil.com/', 'https://meowdb.com./x', 'https://meowdb.com:8443/x', 'https://evil.com\@meowdb.com/', '//meowdb.com/x'])('rejeita %j', (u) => {
+    expect(safeIconUrl(u)).toBeUndefined();
+  });
+  it('aceita host maiusculo', () => { expect(safeIconUrl('https://MEOWDB.com/x')).toBe('https://meowdb.com/x'); });
+});

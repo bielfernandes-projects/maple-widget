@@ -14,10 +14,15 @@ export function mapasParaLevel(maps: GrindMap[], level: number, n = 3): GrindMap
 
 const JANELA_QUEST = 5;
 export function questsParaLevel(quests: Quest[], level: number, feitas: Set<string>, n = 8): Quest[] {
-  return quests
-    .filter((q) => !feitas.has(q.id) && q.level <= level && q.level >= level - JANELA_QUEST)
-    .sort((a, b) => b.exp - a.exp)
-    .slice(0, n);
+  // variantes (mesmo nome+npc, tiers de EXP): mostra só a de maior EXP ainda não feita
+  const melhor = new Map<string, Quest>();
+  for (const q of quests) {
+    if (feitas.has(q.id) || q.level > level || q.level < level - JANELA_QUEST) continue;
+    const k = JSON.stringify([q.name, q.npc]);
+    const cur = melhor.get(k);
+    if (!cur || q.exp > cur.exp) melhor.set(k, q);
+  }
+  return [...melhor.values()].sort((a, b) => b.exp - a.exp).slice(0, n);
 }
 
 export function dicasPara(tips: Tip[], level: number, classe?: string): Tip[] {

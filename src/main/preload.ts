@@ -6,6 +6,7 @@ const api: Api = {
   addSource: (u) => ipcRenderer.invoke('src:add', u),
   removeSource: (u) => ipcRenderer.invoke('src:remove', u),
   refreshSources: () => ipcRenderer.invoke('src:refresh'),
+  openSource: (u) => ipcRenderer.invoke('open:source', u),
   syncNow: () => ipcRenderer.invoke('sync:now'),
   setAutoSync: (on) => ipcRenderer.invoke('sync:toggle', on),
   toggleQuest: (id) => ipcRenderer.invoke('quest:toggle', id),

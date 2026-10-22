@@ -4,6 +4,7 @@ export interface Api {
   addSource(url: string): Promise<{ ok: boolean; erro?: string }>;
   removeSource(url: string): Promise<void>;
   refreshSources(): Promise<void>;
+  openSource(url: string): Promise<void>;
   syncNow(): Promise<void>;
   setAutoSync(on: boolean): Promise<void>;
   toggleQuest(id: string): Promise<void>;

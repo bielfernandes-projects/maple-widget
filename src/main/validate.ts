@@ -1,4 +1,5 @@
 import type { Regions } from '../types';
+import { isAllowedUrl } from '../sources/allowlist';
 
 const REGION_KEYS = ['level', 'exp', 'cls', 'map'];
 const RECT_KEYS = ['x', 'y', 'w', 'h'];
@@ -21,3 +22,7 @@ export function validRegions(x: unknown): x is Regions {
 
 // só o formato (string, <= 500); a checagem de diretório existente fica no main
 export const validGamePathShape = (s: unknown): s is string => typeof s === 'string' && s.length <= 500;
+
+// open:source — só https em domínio permitido (isAllowedUrl aceita http, aqui não)
+export const validOpenUrl = (url: unknown, dominios: string[]): url is string =>
+  typeof url === 'string' && url.startsWith('https://') && isAllowedUrl(url, dominios);

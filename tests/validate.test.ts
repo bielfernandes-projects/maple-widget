@@ -46,3 +46,16 @@ describe('validGamePathShape', () => {
     expect(validGamePathShape('a'.repeat(501))).toBe(false);
   });
 });
+
+import { validOpenUrl } from '../src/main/validate';
+describe('validOpenUrl', () => {
+  const D = ['meowdb.com', 'niadb.com'];
+  it('aceita https permitido', () => {
+    expect(validOpenUrl('https://meowdb.com/msclassic/guides/x', D)).toBe(true);
+    expect(validOpenUrl('https://www.niadb.com/a', D)).toBe(true);
+  });
+  it.each(['http://meowdb.com/x', 'https://evil.com/x', 'javascript:alert(1)', 'https://meowdb.com.evil.com/x', 'https://meowdb.com@evil.com/x', 'https://evil.com/?https://meowdb.com', 'file:///c:/x', ''])('rejeita %j', (u) => {
+    expect(validOpenUrl(u, D)).toBe(false);
+  });
+  it('rejeita nao-string', () => { for (const x of [null, undefined, 1, {}, ['https://meowdb.com/']]) expect(validOpenUrl(x, D)).toBe(false); });
+});
