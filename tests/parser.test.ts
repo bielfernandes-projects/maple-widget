@@ -113,3 +113,38 @@ describe('parseGuide — Quest Database', () => {
     expect(g.quests.some((q) => q.area)).toBe(true);
   });
 });
+
+describe('parseGuide — Quest Database: ids e recompensas', () => {
+  const url = 'https://meowdb.com/msclassic/quest-tracker/all';
+  const H = '<tr><th>Start NPC</th><th>Quest</th><th>Level ↑</th><th>Area</th><th>Start NPC</th><th>EXP</th><th>Mesos</th><th>Rewards</th></tr>';
+  const wrap = (rows: string) => `<main><h1>Quest Database</h1><table>${H}${rows}</table></main>`;
+  const row = (exp: number, ctl = '', reward = '-', quest = '+ Donating') =>
+    `<tr><td>${ctl}</td><td>${quest}</td><td>12</td><td>Henesys</td><td>Mai</td><td>${exp}</td><td>0</td><td>${reward}</td></tr>`;
+
+  it('(a) aria-controls dá ids distintos para mesmo nome/NPC', () => {
+    const g = parseGuide(wrap(row(14200, '<button aria-controls="quest-80014"></button>') + row(11400, '<button aria-controls="quest-80015"></button>')), url);
+    expect(g.quests.map((q) => q.id)).toEqual(['80014', '80015']);
+  });
+  it('(b) sem link nem aria-controls: fallback distinto por EXP', () => {
+    const ids = parseGuide(wrap(row(14200) + row(11400)), url).quests.map((q) => q.id);
+    expect(new Set(ids).size).toBe(2);
+  });
+  it('(c) link /quest-tracker/n vence aria-controls', () => {
+    const g = parseGuide(wrap(row(1, '<a href="/msclassic/quest-tracker/1000">x</a><button aria-controls="quest-5"></button>')), url);
+    expect(g.quests[0].id).toBe('1000');
+  });
+  it('(d) recompensa com vários <li> é unida com ", "', () => {
+    const g = parseGuide(wrap(row(1, '', '<ul><li>A x1</li><li>B x2</li></ul>')), url);
+    expect(g.quests[0].reward).toBe('A x1, B x2');
+  });
+  it('(e) Level | Quest | EXP | EXP to next não vira quests', () => {
+    const g = parseGuide('<main><h1>t</h1><table><tr><th>Level</th><th>Quest</th><th>EXP</th><th>EXP to next</th></tr><tr><td>1</td><td>q</td><td>5</td><td>15</td></tr></table></main>', url);
+    expect([g.quests.length, g.expRows.length]).toEqual([0, 1]);
+  });
+  it('(f) fixture real: ids únicos e numéricos', () => {
+    const real = fs.readFileSync(path.join(__dirname, 'fixtures/guides/quest-database.html'), 'utf8');
+    const ids = parseGuide(real, url).quests.map((q) => q.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.every((i) => /^\d+$/.test(i))).toBe(true);
+  });
+});

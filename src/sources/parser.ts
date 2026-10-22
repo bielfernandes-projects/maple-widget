@@ -89,18 +89,22 @@ export function parseGuide(html: string, url: string): ParsedGuide {
           },
           why: txt(col((h) => h === 'why')), levelMin: range[0], levelMax: range[1], sourceUrl: url,
         });
-      } else if (iQuest >= 0 && iLv >= 0 && iExp >= 0) {
+      } else if (iQuest >= 0 && iLv >= 0 && iExp >= 0 && iNext < 0) {
         if (!txt(iQuest)) continue;
-        const id = row.find('a[href]').toArray().map((a) => $(a).attr('href') ?? '')
+        const linkId = row.find('a[href]').toArray().map((a) => $(a).attr('href') ?? '')
           .map((h) => h.match(/quest-tracker\/(\d+)/)?.[1]).find(Boolean);
-        const reward = txt(col((h) => h.startsWith('reward')));
+        const ctlId = row.find('[aria-controls^="quest-"]').first().attr('aria-controls')?.match(/quest-(\d+)/)?.[1];
+        const rc = cells[col((h) => h.startsWith('reward'))];
+        const items = rc ? rc.find('li').toArray().map((l) => $(l).text().trim()).filter(Boolean) : [];
+        const parts = rc && !items.length ? (rc.html() ?? '').split(/<br\s*\/?>/i).map((s) => cheerio.load(s).text().trim()).filter(Boolean) : [];
+        const reward = items.length ? items.join(', ') : parts.length > 1 ? parts.join(', ') : txt(col((h) => h.startsWith('reward')));
         const name = txt(iQuest).replace(/^\+\s*/, '').trim();
         if (!name) continue;
         const iNpc = heads.map((h) => h === 'from' || h === 'start npc').lastIndexOf(true);
         const npc = txt(iNpc);
         const area = txt(col((h) => h === 'area'));
         out.quests.push({
-          id: id ?? `${name}|${npc}`, name, npc, area: area || undefined,
+          id: linkId ?? ctlId ?? `${name}|${npc}|${num(txt(iLv))}|${num(txt(iExp))}`, name, npc, area: area || undefined,
           level: num(txt(iLv)), exp: num(txt(iExp)), reward: reward === '-' ? '' : reward,
           iconUrl: abs(row.find('img').first().attr('src')), sourceUrl: url,
         });

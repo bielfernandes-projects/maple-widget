@@ -10,4 +10,4 @@ const keep = rows.slice(0, 41).map((tr) => $.html(tr)).join('\n');
 fs.mkdirSync('tests/fixtures/guides', { recursive: true });
 fs.writeFileSync('tests/fixtures/guides/quest-database.html',
   `<!doctype html><html><body><main><h1>Quest Database</h1><table>${keep}</table></main></body></html>`);
-console.log('ok:', rows.length - 1, 'quests na página; 40 guardadas');
+console.log('ok:', Math.min(40, rows.length - 1), 'quests guardadas de', rows.length - 1, 'na página');
