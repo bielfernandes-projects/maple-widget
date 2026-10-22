@@ -3,6 +3,15 @@ import { crop, binarize, toPngBuffer } from './image';
 import type { Img, Regions, Reading } from '../types';
 import digitTemplates from './digit-templates.json';
 
+// SUPOSICOES SUPORTADAS (leia antes de confiar nas leituras)
+// - Layout padrao da HUD do MapleStory Classic (barra inferior com LV/classe/EXP, minimapa no topo-esquerdo), UI escalando proporcionalmente.
+// - Resolucoes testadas: 1366x768 (9 screenshots) e 1920x1080 (2 screenshots), todas JPEG. Capturas ao vivo sao sem perdas (sem artefatos
+//   JPEG): os limiares de cor (b>130, g-b>35, r>200, 0.6 de altura na borda do painel) foram afinados em JPEG e podem precisar de ajuste.
+// - O nome do mapa so e lido em larguras de captura ~1366 ou ~1920 (+-3%): em 1280x720 o OCR erra de forma sistematica ("Corner"->"Comer").
+// - Outras resolucoes/layouts degradam para campos undefined (nunca um valor chutado): glifos de EXP so valem com distancia de Hamming <= MAX_GLYPH_DIST
+//   e level/mapa exigem maioria de votos. Glifos encostados (sem coluna vazia entre eles) nao sao separados.
+// - A validacao real e a checagem ao vivo (Task 10) + o assistente de calibracao de regioes do usuario; os screenshots so provam o spike.
+
 // Normalizado a partir de 1920x1080 (HUD no rodapé, minimapa no topo-esquerdo); calibrado também em 1366x768.
 const n = (x: number, y: number, w: number, h: number) =>
   ({ x: x / 1920, y: y / 1080, w: w / 1920, h: h / 1080 });
@@ -81,14 +90,16 @@ export function glyphBits(img: Img, fg = FG_DIGIT): number[][] {
   return bitsOf(img, { x0: bs[0].x0, x1: bs[bs.length - 1].x1, y0: Math.min(...bs.map((b) => b.y0)), y1: Math.max(...bs.map((b) => b.y1)) }, fg);
 }
 // ponytail: distância de Hamming bruta numa grade 7x9; fontes antialiasadas/escaladas por outro fator podem exigir mais amostras de template
-export function matchGlyph(bits: number[][], templates: Templates): string | undefined {
+// Distancia maxima (de 63 bits) para aceitar um glifo: acertos fora da amostra ficam em 0-7 e erros em 4-7, entao 3 troca alguns acertos por undefined.
+export const MAX_GLYPH_DIST = 3;
+export function matchGlyph(bits: number[][], templates: Templates, maxDist = MAX_GLYPH_DIST): string | undefined {
   let best: string | undefined, bd = Infinity;
   for (const [k, t] of Object.entries(templates)) {
     let d = 0;
     for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) if (bits[y][x] !== t[y][x]) d++;
     if (d < bd) { bd = d; best = k[0]; }
   }
-  return best;
+  return bd <= maxDist ? best : undefined;
 }
 // glifos mais baixos que metade do maior (ponto decimal, ruído) não são dígitos
 export function digitBits(img: Img, fg = FG_DIGIT): number[][][] {
@@ -135,6 +146,17 @@ export function pctBits(img: Img): { int: number[][][]; frac: number[][][] } | u
   const f = (b: Box) => bitsOf(img, b, FG_DIGIT);
   return { int: int.map(f), frac: frac.map(f) };
 }
+// amostras rotuladas (digito, bitmap) de um recorte de EXP; undefined se a contagem de glifos nao bate com o rotulo
+export function expSamples(img: Img, expAbs: number, expPct: number): [string, number[][]][] | undefined {
+  const b = bracketCol(img);
+  if (b < 3) return undefined;
+  const p = pctBits(cols(img, afterBracket(img, b), img.w));
+  const [intS, fracS] = expPct.toFixed(2).split(".");
+  const want = [...String(expAbs), ...intS, ...fracS];
+  const got = [...digitBits(cols(img, 0, b - 2)), ...(p ? [...p.int, ...p.frac] : [])];
+  if (!p || got.length !== want.length || p.int.length !== intS.length) return undefined;
+  return got.map((bits, i) => [want[i], bits]);
+}
 export function readExpDigits(img: Img, templates: Templates): { expAbs: number; expPct: number } | undefined {
   const b = bracketCol(img);
   if (b < 3) return undefined;
@@ -155,6 +177,7 @@ function lumAt(img: Img, x: number, y: number) {
   return lum(img.data[i], img.data[i + 1], img.data[i + 2]);
 }
 function smooth(img: Img, ch: number, lo: number, hi: number, s: number): Img {
+  if (img.w < 1 || img.h < 1 || !Number.isFinite(s) || s < 1 || img.w * img.h * s * s > 4e6) throw new Error(`recorte invalido ${img.w}x${img.h} s=${s}`);
   const P = 8, w = img.w * s + 2 * P, h = img.h * s + 2 * P;
   const data = new Uint8ClampedArray(w * h * 4).fill(255);
   const B = (x: number, y: number) => ch === 3 ? lumAt(img, x, y) : img.data[(Math.min(img.h - 1, Math.max(0, y)) * img.w + Math.min(img.w - 1, Math.max(0, x))) * 4 + ch];
@@ -184,15 +207,20 @@ function mapPanel(img: Img): Img {
 const MAP_PRES: ((i: Img) => Img)[] = ([[0, 170, 230, 60], [3, 170, 230, 60], [3, 170, 230, 50], [3, 150, 230, 80], [0, 150, 230, 110],
   [0, 150, 210, 80], [0, 160, 255, 80], [0, 170, 230, 110], [3, 150, 230, 60], [3, 150, 230, 50], [3, 170, 230, 40], [3, 150, 230, 40]] as const)
   .map(([ch, lo, hi, t]) => (i: Img) => smooth(i, ch, lo, hi, Math.max(1, Math.round(t / i.h))));
-// valor mais votado (empate: o primeiro visto)
-function mode<T>(xs: (T | undefined)[]): T | undefined {
-  const c = new Map<T, number>();
-  for (const x of xs) if (x !== undefined) c.set(x, (c.get(x) ?? 0) + 1);
-  return [...c.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+// valor mais votado (votos agrupados por key); exige >= 2 votos e (o dobro do segundo colocado OU maioria dos votos validos), senao undefined
+function mode<T>(xs: (T | undefined)[], key: (x: T) => string = String): T | undefined {
+  const c = new Map<string, [T, number]>();
+  for (const x of xs) if (x !== undefined) { const k = key(x), e = c.get(k); if (e) e[1]++; else c.set(k, [x, 1]); }
+  const r = [...c.values()].sort((a, b) => b[1] - a[1]);
+  const total = r.reduce((a, e) => a + e[1], 0), top = r[0]?.[1] ?? 0, second = r[1]?.[1] ?? 0;
+  return top >= 2 && (top >= 2 * second || (top > second && top * 2 >= total)) ? r[0][0] : undefined;
 }
+// chave de voto de textos: sem pontuacao/caixa e com l=i (numeral romano "II" sai como "ll")
+const textKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/l/g, "i");
 // numerais romanos ("Ground II") saem como l, | ou 1
 const fixRoman = (s?: string) => s?.split(" ").map((w) => (/^[Il|1]+$/.test(w) ? "I".repeat(w.length) : w)).join(" ").replace(/[^A-Za-z0-9]+$/, "");
 
+const SUPPORTED_WIDTHS = [1366, 1920];
 export class HudReader {
   private constructor(private w: Worker, private templates: Templates) {}
   static async create(cachePath?: string, templates: Templates = digitTemplates) {
@@ -213,13 +241,23 @@ export class HudReader {
   private async map(img: Img) {
     const panel = mapPanel(img), vs: (string | undefined)[] = [];
     for (const pre of MAP_PRES) vs.push(fixRoman(parseMap(await this.run(pre(panel), "", PSM.SINGLE_BLOCK))));
-    return mode(vs);
+    return mode(vs, textKey);
   }
+  // classe: votacao entre limiares/escalas (o lixo varia entre variantes, o texto correto se repete); comparacao sem caixa
+  private async cls(img: Img) {
+    const vs: (string | undefined)[] = [];
+    for (const th of [140, 160, 180, 200]) for (const sc of [3, 4]) vs.push(parseClass(await this.run(binarize(img, (r, g, b) => lum(r, g, b) > th, sc), "", PSM.SINGLE_BLOCK))?.toLowerCase());
+    const m = mode(vs, textKey);
+    return m && m[0].toUpperCase() + m.slice(1);
+  }
+  // cada campo falha sozinho (undefined); read nunca rejeita
   async read(img: Img, r: Regions): Promise<Omit<Reading, 't'>> {
-    const level = await this.level(crop(img, r.level));
-    const exp = readExpDigits(crop(img, r.exp), this.templates);
-    const cls = parseClass(await this.run(binarize(crop(img, r.cls), FG_LIGHT), '', PSM.SINGLE_BLOCK));
-    const map = await this.map(crop(img, r.map));
+    const safe = async <T>(f: () => T | Promise<T>): Promise<T | undefined> => { try { return await f(); } catch { return undefined; } };
+    const level = await safe(() => this.level(crop(img, r.level)));
+    const exp = await safe(() => readExpDigits(crop(img, r.exp), this.templates));
+    const cls = await safe(() => this.cls(crop(img, r.cls)));
+    // o nome do mapa tem erro SISTEMATICO (ex. rn->m) fora das resolucoes testadas, que votacao nao detecta: so se confia nelas
+    const map = SUPPORTED_WIDTHS.some((w) => Math.abs(img.w - w) <= w * 0.03) ? await safe(() => this.map(crop(img, r.map))) : undefined;
     return { level, expAbs: exp?.expAbs, expPct: exp?.expPct, cls, map };
   }
   close() { return this.w.terminate().then(() => undefined); }

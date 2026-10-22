@@ -21,10 +21,15 @@ const ONE = ['010', '110', '010', '010', '010', '010', '111'];
 const SEVEN = ['111', '001', '001', '010', '010', '100', '100'];
 
 describe('matchDigits', () => {
-  const T: Templates = { '1': glyphBits(draw([ONE])), '7': glyphBits(draw([SEVEN])) };
+  // um template por digito E por escala (a distancia maxima de Hamming rejeita glifos que nao parecem com nenhum template)
+  const T: Templates = { '1': glyphBits(draw([ONE])), '7': glyphBits(draw([SEVEN])), '1#3': glyphBits(draw([ONE], 3)), '7#3': glyphBits(draw([SEVEN], 3)) };
   it('lê glifos sintéticos em escala 1 e 3', () => {
     expect(matchDigits(draw([SEVEN, ONE, ONE]), T)).toBe(711);
     expect(matchDigits(draw([ONE, SEVEN], 3), T)).toBe(17);
+  });
+  it('glifo diferente de todos os templates -> undefined (gating)', () => {
+    const BLOB = ['111', '111', '111', '111', '111', '111', '111'];
+    expect(matchDigits(draw([BLOB]), T)).toBeUndefined();
   });
   it('sem glifos ou sem templates -> undefined', () => {
     expect(matchDigits(draw([ONE]), {})).toBeUndefined();
