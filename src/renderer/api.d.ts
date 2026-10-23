@@ -11,9 +11,11 @@ export interface Api {
   setExpanded(b: boolean): Promise<void>;
   setOpacity(n: number): Promise<void>;
   pickGameFolder(): Promise<string | null>;
-  getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number } | null>;
+  getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo' } | null>;
   listWindows(): Promise<string[]>;
-  saveCalibration(key: string, regions: Regions | null, gamePath: string, janelaJogo?: string): Promise<void>;
+  saveCalibration(key: string, regions: Regions | null, gamePath: string, janelaJogo?: string): Promise<{ ok: boolean; erro?: string }>;
+  checkFolder(path: string): Promise<boolean>;
+  skipWizard(): Promise<void>;
   getConfig(): Promise<Config>;
 }
 declare global { interface Window { api: Api } }

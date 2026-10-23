@@ -80,6 +80,15 @@ describe('Store', () => {
     expect(c.janelaJogo).toBe('');
     expect(c.gamePath).toBe('Z');
   });
+  it('tipos errados de janelaJogo/assistentePulado voltam ao padrão', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ janelaJogo: 5, assistentePulado: 'sim' }));
+    const c = new Store(dir).load();
+    expect(c.janelaJogo).toBe('');
+    expect(c.assistentePulado).toBe(false);
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ janelaJogo: 'X', assistentePulado: true }));
+    expect(new Store(dir).load()).toMatchObject({ janelaJogo: 'X', assistentePulado: true });
+  });
   it('config que não é objeto volta ao default', () => {
     for (const txt of ['null', '[1,2]']) {
       const dir = tmp();

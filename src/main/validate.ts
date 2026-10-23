@@ -23,6 +23,10 @@ export function validRegions(x: unknown): x is Regions {
 // só o formato (string, <= 500); a checagem de diretório existente fica no main
 export const validGamePathShape = (s: unknown): s is string => typeof s === 'string' && s.length <= 500;
 
+// caminho absoluto local do Windows (sem UNC, sem segmentos ..); a existência é checada no main
+export const validFolderPath = (s: unknown): s is string =>
+  typeof s === 'string' && s.length <= 500 && /^[A-Za-z]:[\\/]/.test(s) && !s.split(/[\\/]/).includes('..');
+
 export const validJanelaJogo = (s: unknown): s is string => typeof s === 'string' && s.length <= 200;
 
 // open:source — só https em domínio permitido (isAllowedUrl aceita http, aqui não)

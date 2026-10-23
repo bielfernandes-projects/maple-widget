@@ -5,6 +5,7 @@ import type { Config } from './types';
 export const DEFAULT_CONFIG: Config = {
   gamePath: '',
   janelaJogo: '',
+  assistentePulado: false,
   regions: {},
   sources: [],
   dominios: ['meowdb.com', 'niadb.com'],
@@ -29,6 +30,8 @@ export class Store {
         ...saved,
         janela: { ...DEFAULT_CONFIG.janela, ...saved.janela },
         limiares: { ...DEFAULT_CONFIG.limiares, ...saved.limiares },
+        janelaJogo: typeof saved.janelaJogo === 'string' ? saved.janelaJogo : '',
+        assistentePulado: saved.assistentePulado === true,
       };
     } catch { return structuredClone(DEFAULT_CONFIG); }
   }

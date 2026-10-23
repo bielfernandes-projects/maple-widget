@@ -43,6 +43,7 @@ export type Veredito = { cor: 'verde' | 'amarelo' | 'vermelho' | 'cinza'; pct: n
 
 export type Config = {
   gamePath: string;
+  assistentePulado: boolean;
   janelaJogo: string; // '' = detectar automaticamente
   regions: Record<string, Regions>;
   sources: string[];

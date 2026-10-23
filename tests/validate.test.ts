@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validGamePathShape, validJanelaJogo, validRegions, validResKey } from '../src/main/validate';
+import { validFolderPath, validGamePathShape, validJanelaJogo, validRegions, validResKey } from '../src/main/validate';
 
 const r = { x: 0.1, y: 0.2, w: 0.3, h: 0.4 };
 const ok = () => ({ level: { ...r }, exp: { ...r }, cls: { ...r }, map: { ...r } });
@@ -69,5 +69,19 @@ describe('validJanelaJogo', () => {
   it('rejeita >200 e não-string', () => {
     expect(validJanelaJogo('a'.repeat(201))).toBe(false);
     for (const x of [null, undefined, 1, {}, []]) expect(validJanelaJogo(x)).toBe(false);
+  });
+});
+
+describe('validFolderPath', () => {
+  it('aceita caminho absoluto do Windows', () => {
+    expect(validFolderPath(String.raw`C:\Nexon\Library\maplestorycw`)).toBe(true);
+    expect(validFolderPath(String.raw`d:\Jogos`)).toBe(true);
+  });
+  it.each([
+    '', String.raw`\host\share`, String.raw`relativo\x`, 'C:Nexon', String.raw`C:\a\..\b`, String.raw`C:\..`, '/etc',
+  ])('rejeita %j', (p) => { expect(validFolderPath(p)).toBe(false); });
+  it('rejeita >500 e não-string', () => {
+    expect(validFolderPath('C:/' + 'a'.repeat(500))).toBe(false);
+    for (const x of [null, undefined, 1, {}]) expect(validFolderPath(x)).toBe(false);
   });
 });
