@@ -32,3 +32,12 @@ export const validJanelaJogo = (s: unknown): s is string => typeof s === 'string
 // open:source — só https em domínio permitido (isAllowedUrl aceita http, aqui não)
 export const validOpenUrl = (url: unknown, dominios: string[]): url is string =>
   typeof url === 'string' && url.startsWith('https://') && isAllowedUrl(url, dominios);
+
+export const validEscala = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0.25 && n <= 4;
+
+const dimOk = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 8192;
+// quadro RGBA vindo da janela capturadora (renderer: não confiável)
+export function validFrame(msg: unknown): msg is { w: number; h: number; buffer: ArrayBuffer } {
+  if (!isObj(msg) || !dimOk(msg.w) || !dimOk(msg.h)) return false;
+  return msg.buffer instanceof ArrayBuffer && msg.buffer.byteLength === msg.w * msg.h * 4;
+}

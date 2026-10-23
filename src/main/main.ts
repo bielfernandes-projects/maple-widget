@@ -1,8 +1,10 @@
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, session, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { HudReader, DEFAULT_REGIONS } from '../capture/hud';
 import { bgraToImg, decodeJpeg, isBlack, toPngBuffer } from '../capture/image';
+import { escalasCandidatas, resizeImg } from '../capture/scale';
 import { escolherJanela } from '../capture/window';
 import { createTracker } from '../tracker';
 import { makeExpToNext } from '../advisor';
@@ -11,11 +13,12 @@ import { loadSource } from '../sources/load';
 import { syncAuto } from '../sources/sync';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { validFolderPath, validJanelaJogo, validOpenUrl, validRegions, validResKey } from './validate';
+import { validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validRegions, validResKey } from './validate';
 import type { Estado, Img, Library, SourceData } from '../types';
 
 const MAX_JPG = 20 * 1024 * 1024;
 const OVERLAY = 'MW Overlay';
+const CAPTURADOR = 'MW Capturador';
 const TICK_MS = 2000;
 const W_COMPACTO = { w: 340, h: 64 }, W_EXPANDIDO = { w: 340, h: 460 };
 
@@ -32,6 +35,19 @@ let flags = { capturaPreta: false, jogoNaoEncontrado: false };
 let syncInfo = { ultima: 0, offline: false };
 let busy = false;
 const SYNC_INTERVALO_MS = 30 * 60_000;
+const QUADRO_VELHO_MS = 5000, REINICIO_MS = 3000;
+const NATIVA_MSG = 'Captura nativa indisponível; usando captura por miniatura (a leitura pode falhar em resoluções diferentes de 1920×1080).';
+const SELFTEST = process.env.MW_SELFTEST === '1';
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// captura nativa (janela oculta + getDisplayMedia): só o último quadro importa, nunca uma fila
+let cap: BrowserWindow | undefined;
+let ultimoFrame: { img: Img; t: number } | null = null;
+let alvo = ''; // janela procurada: cfg.janelaJogo ou a escolha ainda não salva do assistente
+let semJanela = false; // a última tentativa foi negada por falta de janela (não é falha da captura)
+let nativaFalhou = false;
+let reinicioTimer: NodeJS.Timeout | undefined;
+let logouQuadro = false;
 
 const lib = (): Library => ({
   maps: data.flatMap((d) => d.maps), quests: data.flatMap((d) => d.quests),
@@ -67,20 +83,91 @@ function emit() {
   if (!win || win.isDestroyed()) return;
   const vm = buildViewModel({
     estado, lib: lib(), fontes: data.map((d) => d.source), feitas: new Set(cfg.questsFeitas), lim: cfg.limiares,
-    avisosExtras: ocrErro ? [ocrErro] : [],
+    avisosExtras: [ocrErro, nativaFalhou ? NATIVA_MSG : ''].filter(Boolean),
     ...flags, precisaWizard: !cfg.gamePath && !cfg.assistentePulado, opacidade: cfg.opacidade, expandido: cfg.janela.expandido,
     sync: { auto: cfg.autoSync, guias: data.filter((d) => d.source.auto).length, ...syncInfo },
   });
   win.webContents.send('vm', vm);
 }
 
-async function captureGame(janela = cfg.janelaJogo): Promise<Img | null> {
+// fallback: miniatura do desktopCapturer (reescalada para 1920 de largura)
+async function capturarMiniatura(janela = alvo): Promise<Img | null> {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1080 } });
-  const nome = escolherJanela(srcs.map((x) => x.name).filter((n) => n !== OVERLAY), janela);
-  const s = nome === undefined ? undefined : srcs.find((x) => x.name === nome);
+  const s = escolherFonte(srcs, janela);
   if (!s) return null;
   const { width, height } = s.thumbnail.getSize();
   return width && height ? bgraToImg(s.thumbnail.toBitmap(), width, height) : null;
+}
+function escolherFonte<T extends { name: string }>(srcs: T[], janela: string): T | undefined {
+  const nome = escolherJanela(srcs.map((x) => x.name).filter((n) => n !== OVERLAY && n !== CAPTURADOR), janela);
+  return nome === undefined ? undefined : srcs.find((x) => x.name === nome);
+}
+const quadroNativo = (): Img | null => (ultimoFrame && Date.now() - ultimoFrame.t <= QUADRO_VELHO_MS ? ultimoFrame.img : null);
+const captureGame = async (): Promise<Img | null> => (nativaFalhou ? capturarMiniatura() : quadroNativo());
+// assistente: quadro da janela `j` (troca o alvo e espera até 5 s pelo primeiro quadro dela)
+async function quadroDe(j: string): Promise<Img | null> {
+  if (nativaFalhou) return capturarMiniatura(j);
+  trocarAlvo(j);
+  for (let i = 0; i < 20 && !quadroNativo(); i++) await sleep(250);
+  return quadroNativo();
+}
+
+function blindar(wc: WebContents) {
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  wc.on('will-navigate', (e) => e.preventDefault());
+  wc.on('will-frame-navigate', (e) => e.preventDefault());
+  wc.on('will-attach-webview', (e) => e.preventDefault());
+}
+function iniciarCaptura() { semJanela = false; if (cap && !cap.isDestroyed()) cap.webContents.send('cap:cmd', 'iniciar'); }
+function reiniciarCaptura(ms = REINICIO_MS) {
+  clearTimeout(reinicioTimer);
+  reinicioTimer = setTimeout(() => { reinicioTimer = undefined; iniciarCaptura(); }, ms);
+}
+function trocarAlvo(j: string) { if (j !== alvo) { alvo = j; ultimoFrame = null; reiniciarCaptura(0); } }
+
+function createCapturador() {
+  const file = path.join(__dirname, 'capturer.html');
+  const fileUrl = pathToFileURL(file).href;
+  cap = new BrowserWindow({
+    show: false, title: CAPTURADOR,
+    webPreferences: { preload: path.join(__dirname, 'capturer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, backgroundThrottling: false },
+  });
+  const wc = cap.webContents;
+  blindar(wc);
+  // só a janela capturadora recebe stream; qualquer outro pedido (inclusive o overlay) é negado
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    const f = request.frame, m = wc.isDestroyed() ? null : wc.mainFrame;
+    if (!f || !m || f.processId !== m.processId || f.routingId !== m.routingId || f.url !== fileUrl) {
+      console.warn('[captura] pedido de tela negado:', f?.url);
+      callback(null); return; // null = negar (callback({}) lança no Electron 45)
+    }
+    desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } }).then(
+      (srcs) => escolherFonte(srcs, alvo),
+      (e) => { console.error('[captura] getSources', e); return undefined; },
+    ).then((s) => {
+      if (!s) { semJanela = true; flags.jogoNaoEncontrado = true; callback(null); return; }
+      callback({ video: s });
+    }).catch((e) => console.error('[captura] handler', e));
+  });
+  ipcMain.on('cap:frame', (e, msg) => {
+    if (e.sender !== wc) return;
+    if (!validFrame(msg)) { console.warn('[captura] quadro inválido descartado'); return; }
+    ultimoFrame = { img: { w: msg.w, h: msg.h, data: new Uint8ClampedArray(msg.buffer) }, t: Date.now() };
+    nativaFalhou = false;
+    if (!logouQuadro) {
+      logouQuadro = true; console.log(`[captura] quadro ${msg.w}x${msg.h}`);
+      if (SELFTEST) app.exit(0);
+    }
+  });
+  ipcMain.on('cap:ended', (e, erro) => {
+    if (e.sender !== wc) return;
+    if (typeof erro === 'string' && !semJanela) {
+      if (!nativaFalhou) console.error('[captura] getDisplayMedia falhou:', erro.slice(0, 200));
+      nativaFalhou = true;
+    }
+    reiniciarCaptura();
+  });
+  cap.loadFile(file).then(iniciarCaptura).catch((e) => { console.error('[captura] capturadora', e); nativaFalhou = true; });
 }
 
 // sequencial: HudReader.read não é seguro em paralelo
@@ -93,8 +180,9 @@ async function tick() {
     if (img) {
       if (isBlack(img)) flags.capturaPreta = true;
       else if (reader) {
-        const regions = cfg.regions[resKey(img)] ?? DEFAULT_REGIONS;
-        const r = await reader.read(img, regions);
+        // chave = quadro bruto; regiões normalizadas não mudam com escala uniforme
+        const key = resKey(img), esc = cfg.escalas[key];
+        const r = await reader.read(esc ? resizeImg(img, esc) : img, cfg.regions[key] ?? DEFAULT_REGIONS);
         estado = tracker.push({ ...r, t: Date.now() });
       }
     }
@@ -108,11 +196,7 @@ function createWindow() {
     frame: false, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
   });
-  const wc = win.webContents;
-  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
-  wc.on('will-navigate', (e) => e.preventDefault());
-  wc.on('will-frame-navigate', (e) => e.preventDefault());
-  wc.on('will-attach-webview', (e) => e.preventDefault());
+  blindar(win.webContents);
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setOpacity(cfg.opacidade);
   win.loadFile(path.join(__dirname, 'index.html'));
@@ -183,7 +267,7 @@ function registerIpc() {
     // janela/pasta: escolhas do assistente ainda não gravadas (opcionais, validadas)
     const j = validJanelaJogo(janela) ? janela : cfg.janelaJogo;
     const gp = validFolderPath(pasta) && isDir(pasta) ? pasta : (validFolderPath(cfg.gamePath) ? cfg.gamePath : '');
-    const live = await captureGame(j);
+    const live = await quadroDe(j);
     if (live && !isBlack(live)) return { dataUrl: 'data:image/png;base64,' + toPngBuffer(live).toString('base64'), w: live.w, h: live.h, fuente: 'vivo' };
     if (!gp) return null;
     const dir = path.join(gp, 'appdata');
@@ -199,9 +283,29 @@ function registerIpc() {
   });
   handle<string[]>('wiz:windows', [], async () => {
     const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
-    return [...new Set(srcs.map((x) => x.name).filter((n) => n && n.length <= 200 && n !== OVERLAY))].slice(0, 30);
+    return [...new Set(srcs.map((x) => x.name).filter((n) => n && n.length <= 200 && n !== OVERLAY && n !== CAPTURADOR))].slice(0, 30);
   });
-  handle<void>('wiz:skip', undefined, () => { cfg.assistentePulado = true; store.save(cfg); emit(); });
+  handle<void>('wiz:skip', undefined, () => { cfg.assistentePulado = true; store.save(cfg); trocarAlvo(cfg.janelaJogo); emit(); });
+  type AE = { ok: boolean; escala?: number; pontos?: number; erro?: string };
+  handle<AE>('capture:autoescala', { ok: false, erro: 'Erro ao detectar a escala.' }, async (): Promise<AE> => {
+    if (!reader) return { ok: false, erro: 'Leitor da tela ainda não está pronto. Tente de novo em instantes.' };
+    // ponytail: espera o tick por sondagem (50 ms); HudReader.read não é seguro em paralelo
+    while (busy) await sleep(50);
+    busy = true;
+    try {
+      const frame = quadroNativo();
+      if (!frame) return { ok: false, erro: 'Sem imagem ao vivo do jogo. Abra o jogo (janela/borderless) e tente de novo.' };
+      const key = resKey(frame), regions = cfg.regions[key] ?? DEFAULT_REGIONS;
+      let best = { escala: 1, pontos: -1 };
+      for (const s of escalasCandidatas) {
+        const r = await reader.read(resizeImg(frame, s), regions);
+        const p = (r.level !== undefined ? 2 : 0) + (r.expAbs !== undefined ? 2 : 0) + (r.map !== undefined ? 1 : 0) + (r.cls !== undefined ? 1 : 0);
+        if (p > best.pontos || (p === best.pontos && Math.abs(s - 1) < Math.abs(best.escala - 1))) best = { escala: s, pontos: p };
+      }
+      cfg.escalas[key] = best.escala; store.save(cfg);
+      return { ok: true, ...best };
+    } finally { busy = false; }
+  });
   type R = { ok: boolean; erro?: string };
   handle<R>('wiz:save', { ok: false, erro: 'Erro ao salvar a configuração.' }, (key, regions, gamePath, janelaJogo): R => {
     if (janelaJogo !== undefined && !validJanelaJogo(janelaJogo)) return { ok: false, erro: 'Janela do jogo inválida.' };
@@ -214,7 +318,7 @@ function registerIpc() {
     cfg.gamePath = gamePath as string;
     if (gamePath) cfg.assistentePulado = false;
     if (janelaJogo !== undefined) cfg.janelaJogo = janelaJogo;
-    store.save(cfg); emit();
+    store.save(cfg); trocarAlvo(cfg.janelaJogo); emit();
     return { ok: true };
   });
 }
@@ -242,8 +346,15 @@ async function initReader() {
 app.whenReady().then(async () => {
   store = new Store(app.getPath('userData'));
   cfg = store.load();
+  alvo = cfg.janelaJogo;
   registerIpc();
   createWindow();
+  // MW_SELFTEST=1: só para verificação sem o jogo (captura uma janela de teste, loga o 1º quadro e sai)
+  if (SELFTEST) {
+    alvo = 'MW-SELFTEST';
+    void new BrowserWindow({ width: 800, height: 600, title: alvo }).loadURL(`data:text/html,<title>${alvo}</title><body style="margin:0;height:100vh;background:linear-gradient(90deg,%23c33,%2336c)">`);
+  }
+  createCapturador();
   void loadAll().then(emit).catch((e) => console.error('loadAll', e));
   const reg = (k: string, f: () => void) => { if (!globalShortcut.register(k, f)) console.warn('atalho não registrado:', k); };
   reg('Ctrl+Alt+M', () => (win.isVisible() ? win.hide() : win.show()));

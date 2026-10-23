@@ -144,7 +144,14 @@ export function startWizard(onDone: () => void) {
     const aviso = shot.fuente === 'arquivo'
       ? el('div', 'warn', `Calibração feita sem o jogo aberto: só vale se a janela capturada tiver exatamente ${shot.w}x${shot.h}. Recomendado recalibrar com o jogo aberto (aba Fontes → Recalibrar HUD).`)
       : null;
+    const escMsg = el('div', 'm');
+    const detectar = btn('Detectar escala', async () => {
+      escMsg.textContent = 'Detectando escala…';
+      const r = await window.api.autoEscala();
+      escMsg.textContent = r?.ok ? `Escala ${r.escala} (pontuação ${r.pontos}/6).` : (r?.erro ?? 'Não foi possível detectar a escala.');
+    });
     show(body(...(aviso ? [aviso] : []), info, cv,
+      ...(shot.fuente === 'vivo' ? [detectar, escMsg] : []),
       btn('Desfazer último retângulo', () => { feitas.pop(); paint(); say(); }),
       btn('Voltar', passo2), btn('Pular calibração', async () => passo4())));
   };

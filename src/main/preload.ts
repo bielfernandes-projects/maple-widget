@@ -19,5 +19,6 @@ const api: Api = {
   listWindows: () => ipcRenderer.invoke('wiz:windows'),
   saveCalibration: (k, r, p, j) => ipcRenderer.invoke('wiz:save', k, r, p, j),
   getConfig: () => ipcRenderer.invoke('cfg:get'),
+  autoEscala: () => ipcRenderer.invoke('capture:autoescala'),
 };
 contextBridge.exposeInMainWorld('api', api);

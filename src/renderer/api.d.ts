@@ -17,5 +17,6 @@ export interface Api {
   checkFolder(path: string): Promise<boolean>;
   skipWizard(): Promise<void>;
   getConfig(): Promise<Config>;
+  autoEscala(): Promise<{ ok: boolean; escala?: number; pontos?: number; erro?: string }>;
 }
 declare global { interface Window { api: Api } }

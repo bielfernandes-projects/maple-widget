@@ -85,3 +85,26 @@ describe('validFolderPath', () => {
     for (const x of [null, undefined, 1, {}]) expect(validFolderPath(x)).toBe(false);
   });
 });
+
+import { validEscala, validFrame } from '../src/main/validate';
+describe('validEscala', () => {
+  it('aceita 0.25–4', () => { for (const n of [0.25, 0.5, 1, 1.5, 4]) expect(validEscala(n)).toBe(true); });
+  it('rejeita fora da faixa e não-número', () => {
+    for (const x of [0, 0.24, 4.01, NaN, Infinity, -1, '1', null, undefined, {}]) expect(validEscala(x)).toBe(false);
+  });
+});
+
+describe('validFrame', () => {
+  it('aceita 2x2 com buffer de 16 bytes', () => { expect(validFrame({ w: 2, h: 2, buffer: new ArrayBuffer(16) })).toBe(true); });
+  it('rejeita w/h não inteiros, 0, >8192', () => {
+    for (const [w, h] of [[1.5, 2], [2, 0], [0, 2], [8193, 1], [-2, -2], [NaN, 2]]) expect(validFrame({ w, h, buffer: new ArrayBuffer(Math.max(0, w * h * 4) | 0) })).toBe(false);
+  });
+  it('rejeita buffer de tamanho errado ou que não é ArrayBuffer', () => {
+    expect(validFrame({ w: 2, h: 2, buffer: new ArrayBuffer(15) })).toBe(false);
+    expect(validFrame({ w: 2, h: 2, buffer: new Uint8Array(16) })).toBe(false);
+    expect(validFrame({ w: 2, h: 2, buffer: Array(16).fill(0) })).toBe(false);
+  });
+  it('rejeita null e objetos sem campos', () => {
+    for (const x of [null, undefined, {}, { w: 2, h: 2 }, 'x', 5]) expect(validFrame(x)).toBe(false);
+  });
+});

@@ -46,6 +46,7 @@ export type Config = {
   assistentePulado: boolean;
   janelaJogo: string; // '' = detectar automaticamente
   regions: Record<string, Regions>;
+  escalas: Record<string, number>; // escala de captura por "{w}x{h}" do quadro bruto (ausente = 1)
   sources: string[];
   dominios: string[];
   limiares: Limiares;

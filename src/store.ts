@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from './types';
+import { validEscala, validResKey } from './main/validate';
 
 export const DEFAULT_CONFIG: Config = {
   gamePath: '',
   janelaJogo: '',
   assistentePulado: false,
   regions: {},
+  escalas: {},
   sources: [],
   dominios: ['meowdb.com', 'niadb.com'],
   fontesFixas: ['https://meowdb.com/msclassic/quest-tracker/all'],
@@ -32,6 +34,9 @@ export class Store {
         limiares: { ...DEFAULT_CONFIG.limiares, ...saved.limiares },
         janelaJogo: typeof saved.janelaJogo === 'string' ? saved.janelaJogo : '',
         assistentePulado: saved.assistentePulado === true,
+        escalas: saved.escalas && typeof saved.escalas === 'object' && !Array.isArray(saved.escalas)
+          ? Object.fromEntries(Object.entries(saved.escalas).filter(([k, v]) => validResKey(k) && validEscala(v))) as Record<string, number>
+          : {},
       };
     } catch { return structuredClone(DEFAULT_CONFIG); }
   }

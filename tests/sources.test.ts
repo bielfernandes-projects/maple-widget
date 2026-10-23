@@ -135,3 +135,16 @@ describe('redirect, cache corrompido e falha de escrita', () => {
     expect(d.expRows.length).toBeGreaterThanOrEqual(99);
   });
 });
+
+describe('Store escalas', () => {
+  it('padrão {} e descarta chaves/valores inválidos', () => {
+    const dir = tmp();
+    expect(new Store(dir).load().escalas).toEqual({});
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ escalas: { '1366x768': 0.75, '1920x1080': 1, 'abc': 1, '800x600': 9, '10x10': 'x', '5x5': 0.1 } }));
+    expect(new Store(dir).load().escalas).toEqual({ '1366x768': 0.75, '1920x1080': 1 });
+    for (const e of [null, [1], 'x', 5]) {
+      fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ escalas: e }));
+      expect(new Store(dir).load().escalas).toEqual({});
+    }
+  });
+});
