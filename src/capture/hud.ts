@@ -221,6 +221,8 @@ const textKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace
 const fixRoman = (s?: string) => s?.split(" ").map((w) => (/^[Il|1]+$/.test(w) ? "I".repeat(w.length) : w)).join(" ").replace(/[^A-Za-z0-9]+$/, "");
 
 const SUPPORTED_WIDTHS = [1366, 1920];
+export type Campo = keyof Regions;
+const TODOS: ReadonlySet<Campo> = new Set(['level', 'exp', 'cls', 'map']);
 export class HudReader {
   private constructor(private w: Worker, private templates: Templates) {}
   static async create(cachePath?: string, templates: Templates = digitTemplates) {
@@ -251,13 +253,15 @@ export class HudReader {
     return m && m[0].toUpperCase() + m.slice(1);
   }
   // cada campo falha sozinho (undefined); read nunca rejeita
-  async read(img: Img, r: Regions): Promise<Omit<Reading, 't'>> {
+  read(img: Img, r: Regions): Promise<Omit<Reading, 't'>> { return this.lerCampos(img, r, TODOS); }
+  // só os campos pedidos (os outros ficam undefined); usado pelo LeitorComCache
+  async lerCampos(img: Img, r: Regions, campos: ReadonlySet<Campo>): Promise<Omit<Reading, 't'>> {
     const safe = async <T>(f: () => T | Promise<T>): Promise<T | undefined> => { try { return await f(); } catch { return undefined; } };
-    const level = await safe(() => this.level(crop(img, r.level)));
-    const exp = await safe(() => readExpDigits(crop(img, r.exp), this.templates));
-    const cls = await safe(() => this.cls(crop(img, r.cls)));
+    const level = campos.has('level') ? await safe(() => this.level(crop(img, r.level))) : undefined;
+    const exp = campos.has('exp') ? await safe(() => readExpDigits(crop(img, r.exp), this.templates)) : undefined;
+    const cls = campos.has('cls') ? await safe(() => this.cls(crop(img, r.cls))) : undefined;
     // o nome do mapa tem erro SISTEMATICO (ex. rn->m) fora das resolucoes testadas, que votacao nao detecta: so se confia nelas
-    const map = SUPPORTED_WIDTHS.some((w) => Math.abs(img.w - w) <= w * 0.03) ? await safe(() => this.map(crop(img, r.map))) : undefined;
+    const map = campos.has('map') && SUPPORTED_WIDTHS.some((w) => Math.abs(img.w - w) <= w * 0.03) ? await safe(() => this.map(crop(img, r.map))) : undefined;
     return { level, expAbs: exp?.expAbs, expPct: exp?.expPct, cls, map };
   }
   close() { return this.w.terminate().then(() => undefined); }

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { HudReader, DEFAULT_REGIONS } from '../capture/hud';
+import { LeitorComCache } from '../capture/cached-reader';
 import { bgraToImg, decodeJpeg, isBlack, toPngBuffer } from '../capture/image';
 import { escalasCandidatas, resizeImg } from '../capture/scale';
 import { escolherJanela } from '../capture/window';
@@ -26,6 +27,7 @@ let win: BrowserWindow;
 let store: Store;
 let cfg: ReturnType<Store['load']>;
 let reader: HudReader | undefined;
+let leitor: LeitorComCache | undefined; // tick: OCR pesado só quando o recorte muda
 let ocrErro = '';
 const OCR_MSG = 'Leitura da tela indisponível (falha ao preparar o OCR — verifique a conexão). Tentando de novo…';
 let data: SourceData[] = [];
@@ -214,10 +216,10 @@ async function tick() {
     flags = { capturaPreta: false, jogoNaoEncontrado: !img };
     if (img) {
       if (isBlack(img)) flags.capturaPreta = true;
-      else if (reader) {
+      else if (leitor) {
         // chave = quadro bruto; regiões normalizadas não mudam com escala uniforme
         const key = resKey(img), esc = cfg.escalas[key];
-        const r = await reader.read(esc ? resizeImg(img, esc) : img, cfg.regions[key] ?? DEFAULT_REGIONS);
+        const r = await leitor.read(esc ? resizeImg(img, esc) : img, cfg.regions[key] ?? DEFAULT_REGIONS);
         estado = tracker.push({ ...r, t: Date.now() });
       }
     }
@@ -373,6 +375,7 @@ async function initReader() {
     // MW_FORCE_OCR_FAIL=1: só para o smoke test da falha de OCR
     if (process.env.MW_FORCE_OCR_FAIL) throw new Error('MW_FORCE_OCR_FAIL');
     reader = await HudReader.create(path.join(app.getPath('userData'), 'tessdata'));
+    leitor = new LeitorComCache(reader);
     ocrErro = '';
     console.log('[ocr] pronto');
     clearInterval(retryTimer); retryTimer = undefined;
