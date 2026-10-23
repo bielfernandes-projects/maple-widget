@@ -108,3 +108,12 @@ describe('validFrame', () => {
     for (const x of [null, undefined, {}, { w: 2, h: 2 }, 'x', 5]) expect(validFrame(x)).toBe(false);
   });
 });
+
+describe('validFrame área', () => {
+  const f = (w: number, h: number) => ({ w, h, buffer: new ArrayBuffer(w * h * 4) });
+  it('aceita 3840x2160', () => { expect(validFrame(f(3840, 2160))).toBe(true); });
+  it('rejeita área > 4096x4096', () => {
+    expect(validFrame(f(8192, 8192))).toBe(false);
+    expect(validFrame(f(5000, 4000))).toBe(false);
+  });
+});

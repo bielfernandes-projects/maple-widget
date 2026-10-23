@@ -11,7 +11,7 @@ export interface Api {
   setExpanded(b: boolean): Promise<void>;
   setOpacity(n: number): Promise<void>;
   pickGameFolder(): Promise<string | null>;
-  getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo' } | null>;
+  getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo'; nativa: boolean } | null>;
   listWindows(): Promise<string[]>;
   saveCalibration(key: string, regions: Regions | null, gamePath: string, janelaJogo?: string): Promise<{ ok: boolean; erro?: string }>;
   checkFolder(path: string): Promise<boolean>;

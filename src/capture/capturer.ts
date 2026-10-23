@@ -11,11 +11,19 @@ const cv = document.getElementById('c') as HTMLCanvasElement;
 const ctx = cv.getContext('2d', { willReadFrequently: true })!;
 let stream: MediaStream | null = null;
 let timer: number | undefined;
+// geração: cada iniciar/parar invalida o que estava em andamento (iniciar sobreposto não vaza stream/timer)
+let gen = 0;
+const vivos = new Set<MediaStream>();
+// diagnóstico (main lê por executeJavaScript no autoteste): streams com faixa ainda viva
+(window as unknown as { __mwAtivas: () => number }).__mwAtivas = () =>
+  [...vivos].filter((s) => s.getVideoTracks().some((t) => t.readyState === 'live')).length;
+
+const pararStream = (s: MediaStream) => { s.getTracks().forEach((t) => { t.onended = null; t.stop(); }); vivos.delete(s); };
 
 function parar() {
+  gen++;
   clearInterval(timer); timer = undefined;
-  // remove o onended antes de parar: parada pedida não é "fim" da faixa
-  stream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
+  if (stream) pararStream(stream);
   stream = null; v.srcObject = null;
 }
 
@@ -29,15 +37,23 @@ function enviar() {
 
 async function iniciar() {
   parar();
+  const g = gen;
+  let s: MediaStream | undefined;
   try {
-    const s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    vivos.add(s);
+    if (g !== gen) { pararStream(s); return; }
     stream = s;
-    s.getVideoTracks()[0].onended = () => { parar(); api.ended(); };
+    s.getVideoTracks()[0].onended = () => { if (g === gen) { parar(); api.ended(); } };
     v.srcObject = s;
     await v.play();
+    if (g !== gen) return; // parar() de uma geração mais nova já encerrou `s`
     enviar();
     timer = window.setInterval(enviar, FRAME_MS);
-  } catch (e) { parar(); api.ended(String(e).slice(0, 200)); }
+  } catch (e) {
+    if (g !== gen) { if (s) pararStream(s); return; }
+    parar(); api.ended(String(e).slice(0, 200));
+  }
 }
 
 api.onComando((c) => { if (c === 'iniciar') void iniciar(); else if (c === 'parar') parar(); });

@@ -148,3 +148,13 @@ describe('Store escalas', () => {
     }
   });
 });
+
+describe('Store escalas: chaves perigosas', () => {
+  it('descarta __proto__ e constructor', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'config.json'), '{"escalas":{"__proto__":1,"constructor":1,"800x600":0.8}}');
+    const e = new Store(dir).load().escalas;
+    expect(Object.keys(e)).toEqual(['800x600']);
+    expect(Object.getPrototypeOf(e)).toBe(Object.prototype);
+  });
+});

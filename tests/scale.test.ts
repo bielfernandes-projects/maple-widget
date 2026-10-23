@@ -62,3 +62,20 @@ describe('resizeImg', () => {
     for (const s of escalasCandidatas) { expect(s).toBeGreaterThanOrEqual(0.25); expect(s).toBeLessThanOrEqual(4); }
   });
 });
+
+describe('resizeImg cópias e não-quadradas', () => {
+  it('escala 1 e escala inválida devolvem cópia', () => {
+    const a = mk(2, 2, (x, y) => [x * 9, y * 9, 1]);
+    for (const s of [1, NaN]) {
+      const b = resizeImg(a, s);
+      expect(b).not.toBe(a); expect(b.data).not.toBe(a.data);
+      expect(Array.from(b.data)).toEqual(Array.from(a.data));
+    }
+  });
+  it('6x2 por 0.5 vira 3x1 com média dos blocos', () => {
+    const a = mk(6, 2, (x, y) => [x * 10 + y * 100, 0, 0]);
+    const b = resizeImg(a, 0.5);
+    expect([b.w, b.h]).toEqual([3, 1]);
+    expect([px(b, 0, 0)[0], px(b, 1, 0)[0], px(b, 2, 0)[0]]).toEqual([55, 75, 95]);
+  });
+});

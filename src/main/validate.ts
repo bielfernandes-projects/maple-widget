@@ -38,6 +38,6 @@ export const validEscala = (n: unknown): n is number => typeof n === 'number' &&
 const dimOk = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 8192;
 // quadro RGBA vindo da janela capturadora (renderer: não confiável)
 export function validFrame(msg: unknown): msg is { w: number; h: number; buffer: ArrayBuffer } {
-  if (!isObj(msg) || !dimOk(msg.w) || !dimOk(msg.h)) return false;
+  if (!isObj(msg) || !dimOk(msg.w) || !dimOk(msg.h) || msg.w * msg.h > 16_777_216) return false; // área ≤ 4096×4096
   return msg.buffer instanceof ArrayBuffer && msg.buffer.byteLength === msg.w * msg.h * 4;
 }

@@ -13,7 +13,7 @@ import { loadSource } from '../sources/load';
 import { syncAuto } from '../sources/sync';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validRegions, validResKey } from './validate';
+import { validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validRegions, validResKey } from './validate';
 import type { Estado, Img, Library, SourceData } from '../types';
 
 const MAX_JPG = 20 * 1024 * 1024;
@@ -37,7 +37,7 @@ let busy = false;
 const SYNC_INTERVALO_MS = 30 * 60_000;
 const QUADRO_VELHO_MS = 5000, REINICIO_MS = 3000;
 const NATIVA_MSG = 'Captura nativa indisponível; usando captura por miniatura (a leitura pode falhar em resoluções diferentes de 1920×1080).';
-const SELFTEST = process.env.MW_SELFTEST === '1';
+const SELFTEST = process.env.MW_SELFTEST === '1' && !app.isPackaged;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // captura nativa (janela oculta + getDisplayMedia): só o último quadro importa, nunca uma fila
@@ -105,11 +105,11 @@ function escolherFonte<T extends { name: string }>(srcs: T[], janela: string): T
 const quadroNativo = (): Img | null => (ultimoFrame && Date.now() - ultimoFrame.t <= QUADRO_VELHO_MS ? ultimoFrame.img : null);
 const captureGame = async (): Promise<Img | null> => (nativaFalhou ? capturarMiniatura() : quadroNativo());
 // assistente: quadro da janela `j` (troca o alvo e espera até 5 s pelo primeiro quadro dela)
-async function quadroDe(j: string): Promise<Img | null> {
-  if (nativaFalhou) return capturarMiniatura(j);
+async function quadroDe(j: string): Promise<{ img: Img | null; nativa: boolean }> {
+  if (nativaFalhou) return { img: await capturarMiniatura(j), nativa: false };
   trocarAlvo(j);
   for (let i = 0; i < 20 && !quadroNativo(); i++) await sleep(250);
-  return quadroNativo();
+  return { img: quadroNativo(), nativa: true };
 }
 
 function blindar(wc: WebContents) {
@@ -125,49 +125,82 @@ function reiniciarCaptura(ms = REINICIO_MS) {
 }
 function trocarAlvo(j: string) { if (j !== alvo) { alvo = j; ultimoFrame = null; reiniciarCaptura(0); } }
 
-function createCapturador() {
-  const file = path.join(__dirname, 'capturer.html');
-  const fileUrl = pathToFileURL(file).href;
-  cap = new BrowserWindow({
+const CAP_FILE = () => path.join(__dirname, 'capturer.html');
+const daCapturadora = (wc: WebContents) => !!cap && !cap.isDestroyed() && wc === cap.webContents;
+let saindo = false, ultimaQueda = 0, quadros = 0;
+
+function criarCapturadora() {
+  const w = new BrowserWindow({
     show: false, title: CAPTURADOR,
     webPreferences: { preload: path.join(__dirname, 'capturer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, backgroundThrottling: false },
   });
-  const wc = cap.webContents;
-  blindar(wc);
+  cap = w;
+  blindar(w.webContents);
+  w.webContents.on('render-process-gone', (_e, d) => capturadoraCaiu(w, d.reason));
+  w.on('unresponsive', () => capturadoraCaiu(w, 'unresponsive'));
+  w.on('closed', () => capturadoraCaiu(w, 'closed'));
+  w.loadFile(CAP_FILE()).then(iniciarCaptura).catch((e) => { console.error('[captura] capturadora', e); nativaFalhou = true; emit(); });
+}
+// recria a capturadora uma vez; se cair de novo em até 60 s, fica na miniatura
+function capturadoraCaiu(w: BrowserWindow, motivo: string) {
+  if (saindo || w !== cap) return; // eventos da janela antiga (ou do encerramento do app) são ignorados
+  console.error('[captura] capturadora caiu:', motivo);
+  cap = undefined;
+  if (!w.isDestroyed()) w.destroy();
+  const agora = Date.now();
+  if (agora - ultimaQueda < 60_000) { nativaFalhou = true; emit(); return; }
+  ultimaQueda = agora;
+  criarCapturadora();
+}
+
+// registrado uma vez; vale para a capturadora atual (inclusive recriada)
+function registrarCaptura() {
+  const fileUrl = pathToFileURL(CAP_FILE()).href;
   // só a janela capturadora recebe stream; qualquer outro pedido (inclusive o overlay) é negado
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    const f = request.frame, m = wc.isDestroyed() ? null : wc.mainFrame;
+    let chamado = false;
+    const responder = (s: Parameters<typeof callback>[0]) => { if (chamado) return; chamado = true; callback(s); };
+    const f = request.frame, m = cap && !cap.isDestroyed() ? cap.webContents.mainFrame : null;
     if (!f || !m || f.processId !== m.processId || f.routingId !== m.routingId || f.url !== fileUrl) {
       console.warn('[captura] pedido de tela negado:', f?.url);
-      callback(null); return; // null = negar (callback({}) lança no Electron 45)
+      responder(null); return; // null = negar (callback({}) lança no Electron 45)
     }
     desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } }).then(
       (srcs) => escolherFonte(srcs, alvo),
       (e) => { console.error('[captura] getSources', e); return undefined; },
     ).then((s) => {
-      if (!s) { semJanela = true; flags.jogoNaoEncontrado = true; callback(null); return; }
-      callback({ video: s });
-    }).catch((e) => console.error('[captura] handler', e));
+      if (!s) { semJanela = true; flags.jogoNaoEncontrado = true; responder(null); return; }
+      responder({ video: s });
+    }).catch((e) => { console.error('[captura] handler', e); responder(null); });
   });
   ipcMain.on('cap:frame', (e, msg) => {
-    if (e.sender !== wc) return;
+    if (!daCapturadora(e.sender)) return;
     if (!validFrame(msg)) { console.warn('[captura] quadro inválido descartado'); return; }
     ultimoFrame = { img: { w: msg.w, h: msg.h, data: new Uint8ClampedArray(msg.buffer) }, t: Date.now() };
-    nativaFalhou = false;
+    nativaFalhou = false; quadros++;
     if (!logouQuadro) {
       logouQuadro = true; console.log(`[captura] quadro ${msg.w}x${msg.h}`);
-      if (SELFTEST) app.exit(0);
+      if (SELFTEST) void autoteste();
     }
   });
   ipcMain.on('cap:ended', (e, erro) => {
-    if (e.sender !== wc) return;
+    if (!daCapturadora(e.sender)) return;
     if (typeof erro === 'string' && !semJanela) {
       if (!nativaFalhou) console.error('[captura] getDisplayMedia falhou:', erro.slice(0, 200));
       nativaFalhou = true;
     }
     reiniciarCaptura();
   });
-  cap.loadFile(file).then(iniciarCaptura).catch((e) => { console.error('[captura] capturadora', e); nativaFalhou = true; });
+}
+// autoteste: dois `iniciar` sobrepostos devem deixar UMA stream ativa e quadros a cada ~2 s (sem duplicados)
+async function autoteste() {
+  iniciarCaptura(); iniciarCaptura();
+  quadros = 0;
+  await sleep(7000);
+  const ativas = cap && !cap.isDestroyed() ? await cap.webContents.executeJavaScript('window.__mwAtivas()') : -1;
+  console.log(`[captura] autoteste: streams ativas ${ativas}, quadros em 7 s ${quadros}`);
+  saindo = true; // app.exit não emite before-quit: sem isso o 'closed' recriaria a capturadora
+  app.exit(0);
 }
 
 // sequencial: HudReader.read não é seguro em paralelo
@@ -263,12 +296,15 @@ function registerIpc() {
     return r.canceled ? null : (r.filePaths[0] ?? null);
   });
   handle<boolean>('wiz:check-folder', false, (p) => validFolderPath(p) && isDir(p));
-  handle<{ dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo' } | null>('wiz:shot', null, async (janela, pasta) => {
-    // janela/pasta: escolhas do assistente ainda não gravadas (opcionais, validadas)
+  type Shot = { dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo'; nativa: boolean };
+  handle<Shot | null>('wiz:shot', null, async (janela, pasta) => {
+    // janela/pasta: escolhas do assistente ainda não gravadas (opcionais, validadas).
+    // A janela vira o `alvo` temporário da captura; o assistente só termina por wiz:save/wiz:skip,
+    // que voltam o alvo para cfg.janelaJogo (e um wiz:shot sem janela válida também volta).
     const j = validJanelaJogo(janela) ? janela : cfg.janelaJogo;
     const gp = validFolderPath(pasta) && isDir(pasta) ? pasta : (validFolderPath(cfg.gamePath) ? cfg.gamePath : '');
-    const live = await quadroDe(j);
-    if (live && !isBlack(live)) return { dataUrl: 'data:image/png;base64,' + toPngBuffer(live).toString('base64'), w: live.w, h: live.h, fuente: 'vivo' };
+    const { img: live, nativa } = await quadroDe(j);
+    if (live && !isBlack(live)) return { dataUrl: 'data:image/png;base64,' + toPngBuffer(live).toString('base64'), w: live.w, h: live.h, fuente: 'vivo', nativa };
     if (!gp) return null;
     const dir = path.join(gp, 'appdata');
     const nomes = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /^Maple_A_.*\.jpg$/.test(n)).sort().reverse() : [];
@@ -277,7 +313,7 @@ function registerIpc() {
       if (fs.statSync(f).size > MAX_JPG) continue; // arquivo suspeito de tão grande: tenta o próximo
       const buf = fs.readFileSync(f);
       const im = decodeJpeg(buf);
-      return { dataUrl: 'data:image/jpeg;base64,' + buf.toString('base64'), w: im.w, h: im.h, fuente: 'arquivo' };
+      return { dataUrl: 'data:image/jpeg;base64,' + buf.toString('base64'), w: im.w, h: im.h, fuente: 'arquivo', nativa: false };
     }
     return null;
   });
@@ -295,6 +331,7 @@ function registerIpc() {
     try {
       const frame = quadroNativo();
       if (!frame) return { ok: false, erro: 'Sem imagem ao vivo do jogo. Abra o jogo (janela/borderless) e tente de novo.' };
+      if (isBlack(frame)) return { ok: false, erro: 'Quadro preto: o jogo parece estar em tela cheia exclusiva ou ainda carregando.' };
       const key = resKey(frame), regions = cfg.regions[key] ?? DEFAULT_REGIONS;
       let best = { escala: 1, pontos: -1 };
       for (const s of escalasCandidatas) {
@@ -302,6 +339,8 @@ function registerIpc() {
         const p = (r.level !== undefined ? 2 : 0) + (r.expAbs !== undefined ? 2 : 0) + (r.map !== undefined ? 1 : 0) + (r.cls !== undefined ? 1 : 0);
         if (p > best.pontos || (p === best.pontos && Math.abs(s - 1) < Math.abs(best.escala - 1))) best = { escala: s, pontos: p };
       }
+      // nada lido em nenhuma escala: não sobrescreve um valor bom anterior
+      if (best.pontos <= 0 || !validEscala(best.escala)) return { ok: false, erro: 'Não consegui ler a HUD em nenhuma escala. Confira a calibração das regiões e tente de novo com o jogo na tela do personagem.' };
       cfg.escalas[key] = best.escala; store.save(cfg);
       return { ok: true, ...best };
     } finally { busy = false; }
@@ -349,12 +388,15 @@ app.whenReady().then(async () => {
   alvo = cfg.janelaJogo;
   registerIpc();
   createWindow();
-  // MW_SELFTEST=1: só para verificação sem o jogo (captura uma janela de teste, loga o 1º quadro e sai)
+  // a capturadora oculta não segura o app: fechar o overlay encerra
+  win.on('closed', () => app.quit());
+  // MW_SELFTEST=1 (só fora do pacote): verificação sem o jogo — captura uma janela de teste, loga e sai
   if (SELFTEST) {
     alvo = 'MW-SELFTEST';
     void new BrowserWindow({ width: 800, height: 600, title: alvo }).loadURL(`data:text/html,<title>${alvo}</title><body style="margin:0;height:100vh;background:linear-gradient(90deg,%23c33,%2336c)">`);
   }
-  createCapturador();
+  registrarCaptura();
+  criarCapturadora();
   void loadAll().then(emit).catch((e) => console.error('loadAll', e));
   const reg = (k: string, f: () => void) => { if (!globalShortcut.register(k, f)) console.warn('atalho não registrado:', k); };
   reg('Ctrl+Alt+M', () => (win.isVisible() ? win.hide() : win.show()));
@@ -366,5 +408,6 @@ app.whenReady().then(async () => {
   await initReader();
   void tick();
 }).catch((e) => { console.error('startup', e); app.quit(); });
+app.on('before-quit', () => { saindo = true; });
 app.on('will-quit', () => { globalShortcut.unregisterAll(); flushSave(); void reader?.close(); });
 app.on('window-all-closed', () => app.quit());
