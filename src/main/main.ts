@@ -12,9 +12,11 @@ import { manterSeVazio, syncAuto } from '../sources/sync';
 import { migrarCacheGuias } from '../sources/migrar';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { posicaoVisivel, validAddUrl, validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validQuestId, validRecortes, validRegions, validResKey } from './validate';
+import { posicaoVisivel, validConsulta, validAddUrl, validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validQuestId, validRecortes, validRegions, validResKey } from './validate';
 import { espelharConsole, prepararLog } from './log';
-import type { Estado, Img, Library, SourceData, SyncInfo } from '../types';
+import { buscar, type Resultado } from '../search';
+import { syncDb } from '../sources/gamedb';
+import type { Estado, GameDb, Img, Library, SourceData, SyncInfo } from '../types';
 
 const MAX_JPG = 20 * 1024 * 1024;
 const OVERLAY = 'MW Overlay';
@@ -30,6 +32,8 @@ let leitor: LeitorComCache | undefined; // tick: OCR pesado só quando o recorte
 let ocrErro = '';
 const OCR_MSG = 'Leitura da tela indisponível (falha ao preparar o OCR). Tentando de novo a cada 30 s…';
 let data: SourceData[] = [];
+let db: GameDb = { monstros: [], entradas: [] };
+let dbSincronizando = false;
 const tracker = createTrackerComTabela();
 let estado: Estado | null = null;
 let flags = { capturaPreta: false, jogoNaoEncontrado: false };
@@ -63,6 +67,15 @@ const lib = (): Library => ({
   maps: data.flatMap((d) => d.maps), quests: data.flatMap((d) => d.quests),
   expRows: data.flatMap((d) => d.expRows), tips: data.flatMap((d) => d.tips),
 });
+// base do jogo (monstros/mapas/NPCs/itens) em segundo plano: incremental, nunca lança
+async function syncGameDb() {
+  if (dbSincronizando || !cfg.autoSync) return;
+  dbSincronizando = true;
+  try {
+    const r = await syncDb({ sitemapUrl: cfg.sitemapUrl, dominios: cfg.dominios, file: path.join(app.getPath('userData'), 'gamedb.json') });
+    if (r.monstros.length || r.entradas.length) db = { monstros: r.monstros, entradas: r.entradas };
+  } finally { dbSincronizando = false; }
+}
 // guias na pasta "guias": "cache" era a mesma pasta do "Cache" do Chromium (NTFS não diferencia maiúsculas)
 const cacheDir = () => path.join(app.getPath('userData'), 'guias');
 const resKey = (i: Img) => `${i.w}x${i.h}`;
@@ -358,6 +371,10 @@ function registerIpc() {
     const a = screen.getDisplayMatching(win.getBounds()).workArea;
     win.setSize(Math.round(Math.min(a.width, Math.max(300, w))), Math.round(Math.min(a.height, Math.max(120, h))));
   });
+  handle<{ resultados: Resultado[]; monstros: number; sincronizando: boolean }>('search:query', { resultados: [], monstros: 0, sincronizando: false }, (q) => {
+    const l = lib();
+    return { resultados: validConsulta(q) ? buscar(db, l.quests, l.maps, q) : [], monstros: db.monstros.length, sincronizando: dbSincronizando };
+  });
   handle<void>('win:opacity', undefined, (n) => {
     if (typeof n !== 'number' || !Number.isFinite(n)) return;
     cfg.opacidade = Math.min(1, Math.max(0.3, n)); win.setOpacity(cfg.opacidade); scheduleSave();
@@ -509,14 +526,16 @@ if (!unica) {
     registrarCaptura();
     criarCapturadora();
     void loadAll().then(emit).catch((e) => console.error('loadAll', e));
+    void syncGameDb();
     const reg = (k: string, f: () => void) => { if (!globalShortcut.register(k, f)) console.warn('atalho não registrado:', k); };
     reg('Ctrl+Alt+M', () => (win.isVisible() ? win.hide() : win.show()));
     let through = false;
     reg('Ctrl+Alt+C', () => { through = !through; win.setIgnoreMouseEvents(through, { forward: true }); });
     reg('Ctrl+Alt+Q', sair);
+    reg('Ctrl+Alt+F', () => { win.show(); applySize(true); win.focus(); win.webContents.send('buscar'); });
     setInterval(tick, TICK_MS);
     // não empilha sincronização: pula se já há carga em andamento
-    setInterval(() => { if (cfg.autoSync && !loading) loadAll().then(emit).catch((e) => console.error('sync', e)); }, SYNC_INTERVALO_MS);
+    setInterval(() => { void syncGameDb(); if (cfg.autoSync && !loading) loadAll().then(emit).catch((e) => console.error('sync', e)); }, SYNC_INTERVALO_MS);
     await initReader();
     void tick();
   }).catch((e) => { console.error('startup', e); app.quit(); });

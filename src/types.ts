@@ -38,6 +38,12 @@ export type Source = {
 export type SourceData = ParsedGuide & { source: Source };
 export type Library = { maps: GrindMap[]; quests: Quest[]; expRows: ExpRow[]; tips: Tip[] };
 
+// base do jogo (meowdb): monstros com onde aparecem + índices de mapas/NPCs/itens
+export type Local = { mapaId: string; mapa: string; regiao: string; qtd: number; respawn?: string };
+export type Monster = { id: string; name: string; level: number; exp: number; hp: number; iconUrl?: string; locais: Local[]; sourceUrl: string };
+export type Entrada = { tipo: 'item' | 'npc' | 'mapa'; id: string; nome: string; info?: string; sourceUrl: string };
+export type GameDb = { monstros: Monster[]; entradas: Entrada[] };
+
 export type Limiares = { verde: number; amarelo: number };
 export type Veredito = { cor: 'verde' | 'amarelo' | 'vermelho' | 'cinza'; pct: number | null; ref?: GrindMap };
 

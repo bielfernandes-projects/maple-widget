@@ -11,6 +11,8 @@ const api: Api = {
   setAutoSync: (on) => ipcRenderer.invoke('sync:toggle', on),
   toggleQuest: (id) => ipcRenderer.invoke('quest:toggle', id),
   setExpanded: (b) => ipcRenderer.invoke('win:expand', b),
+  search: (q) => ipcRenderer.invoke('search:query', q),
+  onBuscar: (cb) => { ipcRenderer.on('buscar', () => cb()); },
   setSize: (w, h) => ipcRenderer.invoke('win:size', w, h),
   setCalibSize: () => ipcRenderer.invoke('win:calib'),
   setOpacity: (n) => ipcRenderer.invoke('win:opacity', n),

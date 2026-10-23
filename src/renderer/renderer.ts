@@ -1,4 +1,5 @@
 import type { GrindMap, Quest, Tip, ViewModel } from '../types';
+import type { Resultado } from '../search';
 import { startWizard } from './wizard';
 import { safeIconUrl } from './safe-url';
 
@@ -24,7 +25,10 @@ const fmt = (n: number) => (n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) 
 
 const TETO = 'Referência: EXP/h máximo do guia (um teto, não uma média).';
 let vm: ViewModel | null = null;
-let tab: 'agora' | 'quests' | 'mapas' | 'fontes' = 'agora';
+let tab: 'agora' | 'quests' | 'mapas' | 'buscar' | 'fontes' = 'agora';
+let buscaQ = '';
+let buscaRes: Resultado[] = [];
+let buscaMsg = '';
 let cardData: NonNullable<ViewModel['levelUp']> | null = null;
 let cardUntil = 0;
 let cardTimer: number | undefined;
@@ -61,7 +65,7 @@ window.api.onVM((v) => {
 function render() {
   if (!vm || wizardActive || dragging) return;
   const ae = document.activeElement;
-  if (ae instanceof HTMLInputElement && ae.type === 'text' && ae.value !== '') return; // usuário digitando
+  if (ae instanceof HTMLInputElement && ae.type === 'text' && (ae.value !== '' || ae.classList.contains('busca'))) return; // usuário digitando
   const showCard = !!cardData && Date.now() < cardUntil;
   const key = JSON.stringify([vm, tab, showCard ? cardData : null]);
   if (key === lastKey) return;
@@ -80,7 +84,7 @@ function render() {
   const kids: Node[] = [head];
   if (vm.expandido) {
     if (showCard) kids.push(levelCard(cardData!));
-    kids.push(h('div', { class: 'tabs nodrag', role: 'tablist' }, ...(['agora', 'quests', 'mapas', 'fontes'] as const).map((t) =>
+    kids.push(h('div', { class: 'tabs nodrag', role: 'tablist' }, ...(['agora', 'quests', 'mapas', 'buscar', 'fontes'] as const).map((t) =>
       h('button', { class: t === tab ? 'on' : '', role: 'tab', 'aria-selected': String(t === tab), onclick: () => { tab = t; fontesMsg = ''; render(); } }, t[0].toUpperCase() + t.slice(1)))));
     kids.push(h('div', { class: 'body nodrag' }, ...vm.avisos.map((a) => h('div', { class: 'warn' }, a)), ...tabBody(vm)));
     kids.push(footer(vm));
@@ -138,7 +142,36 @@ function tabBody(v: ViewModel): Kid[] {
   }
   if (tab === 'quests') return v.quests.length ? v.quests.map(questRow) : [v.fontes.length ? empty('Nenhuma quest para este level nas fontes.') : emptyAdd('Nenhuma fonte carregada.')];
   if (tab === 'mapas') return v.mapas.length ? v.mapas.map((m) => h('div', null, mapRow(m), h('div', { class: 'm' }, m.why))) : [v.fontes.length ? empty('Nenhum mapa para este level nas fontes.') : emptyAdd('Nenhuma fonte carregada.')];
+  if (tab === 'buscar') return buscaTab();
   return fontesTab(v);
+}
+
+const TIPOS = { monstro: 'Monstro', mapa: 'Mapa', npc: 'NPC', item: 'Item' } as const;
+function resRow(r: Resultado) {
+  const det = h('div', { class: 'det' }, ...r.linhas.map((l) => h('div', { class: 'm' }, l)),
+    h('button', { onclick: (ev: Event) => { ev.stopPropagation(); void window.api.openSource(r.url); } }, 'Abrir no meowdb ↗'));
+  det.hidden = true;
+  const row = h('div', { class: 'row res', onclick: () => { det.hidden = !det.hidden; } }, icon(r.iconUrl),
+    h('div', { class: 't' }, h('b', null, r.titulo), h('span', { class: 'm' }, `${TIPOS[r.tipo]} · ${r.sub}`)));
+  return h('div', null, row, det);
+}
+function buscaTab(): Kid[] {
+  const input = h('input', { type: 'text', class: 'busca', placeholder: 'Buscar mob, mapa, NPC ou item…', maxlength: '100', value: buscaQ });
+  const status = h('div', { class: 'm' }, buscaMsg);
+  const lista = h('div', null);
+  const pinta = () => lista.replaceChildren(...(buscaRes.length ? buscaRes.map(resRow) : [empty(buscaQ.trim() ? 'Nada encontrado.' : 'Digite um nome para buscar.')]));
+  const consulta = async () => {
+    const q = input.value;
+    const r = await window.api.search(q);
+    if (q !== input.value) return; // chegou depois de outra digitação
+    buscaRes = r.resultados;
+    buscaMsg = r.monstros ? '' : (r.sincronizando ? 'Baixando a base do jogo (primeira vez, pode levar alguns minutos)…' : 'Base do jogo ainda não carregada (precisa de internet na primeira vez).');
+    status.textContent = buscaMsg; pinta();
+  };
+  let timer: number | undefined;
+  input.addEventListener('input', () => { buscaQ = input.value; clearTimeout(timer); timer = window.setTimeout(() => void consulta(), 150); });
+  pinta(); void consulta();
+  return [input, status, lista];
 }
 
 function fontesTab(v: ViewModel): Kid[] {
@@ -191,3 +224,9 @@ function footer(v: ViewModel) {
   g.addEventListener('pointermove', (e) => { if (ini) void window.api.setSize(ini.w + e.screenX - ini.x, ini.h + e.screenY - ini.y); });
   g.addEventListener('pointerup', () => { ini = null; });
 }
+
+// Ctrl+Alt+F: abre a aba Buscar com o campo em foco
+window.api.onBuscar(() => {
+  tab = 'buscar'; if (vm) vm.expandido = true; lastKey = ''; render();
+  document.querySelector<HTMLInputElement>('input.busca')?.focus();
+});

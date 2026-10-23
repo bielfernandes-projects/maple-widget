@@ -36,6 +36,7 @@ export const validOpenUrl = (url: unknown, dominios: string[]): url is string =>
 // src:add — link extra: https, domínio permitido, até 500 caracteres
 export const validAddUrl = (url: unknown, dominios: string[]): url is string =>
   typeof url === 'string' && url.length <= 500 && validOpenUrl(url, dominios);
+export const validConsulta = (q: unknown): q is string => typeof q === 'string' && q.trim().length >= 1 && q.length <= 100;
 export const validQuestId = (id: unknown): id is string => typeof id === 'string' && id.length >= 1 && id.length <= 200;
 
 type Rect = { x: number; y: number; width: number; height: number };

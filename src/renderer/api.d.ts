@@ -11,6 +11,8 @@ export interface Api {
   setExpanded(b: boolean): Promise<void>;
   setCalibSize(): Promise<void>;
   setSize(w: number, h: number): Promise<void>;
+  search(q: string): Promise<{ resultados: import('../search').Resultado[]; monstros: number; sincronizando: boolean }>;
+  onBuscar(cb: () => void): void;
   setOpacity(n: number): Promise<void>;
   pickGameFolder(): Promise<string | null>;
   getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo'; nativa: boolean } | null>;
