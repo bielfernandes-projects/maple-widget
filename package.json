@@ -8,7 +8,7 @@
     "start": "node build.mjs && electron .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dist": "node build.mjs && electron-builder --win portable"
+    "dist": "node build.mjs && electron-builder --win portable --publish never"
   },
   "build": {
     "appId": "dev.maplewidget",
@@ -18,8 +18,17 @@
       "package.json"
     ],
     "asarUnpack": [
+      "node_modules/tesseract.js/**",
       "node_modules/tesseract.js-core/**"
-    ]
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "directories": {
+      "output": "release"
+    }
   },
   "dependencies": {
     "cheerio": "^1.2.0",

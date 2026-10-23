@@ -37,7 +37,8 @@ let busy = false;
 const SYNC_INTERVALO_MS = 30 * 60_000;
 const QUADRO_VELHO_MS = 5000, REINICIO_MS = 3000;
 const NATIVA_MSG = 'Captura nativa indisponível; usando captura por miniatura (a leitura pode falhar em resoluções diferentes de 1920×1080).';
-const SELFTEST = process.env.MW_SELFTEST === '1' && !app.isPackaged;
+// MW_SELFTEST=1: autoteste e sai; =hold: igual, mas não sai (sonda de desempenho). Só fora do pacote.
+const SELFTEST = (process.env.MW_SELFTEST === '1' || process.env.MW_SELFTEST === 'hold') && !app.isPackaged;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // captura nativa (janela oculta + getDisplayMedia): só o último quadro importa, nunca uma fila
@@ -199,6 +200,7 @@ async function autoteste() {
   await sleep(7000);
   const ativas = cap && !cap.isDestroyed() ? await cap.webContents.executeJavaScript('window.__mwAtivas()') : -1;
   console.log(`[captura] autoteste: streams ativas ${ativas}, quadros em 7 s ${quadros}`);
+  if (process.env.MW_SELFTEST === 'hold') return;
   saindo = true; // app.exit não emite before-quit: sem isso o 'closed' recriaria a capturadora
   app.exit(0);
 }
@@ -372,9 +374,11 @@ async function initReader() {
     if (process.env.MW_FORCE_OCR_FAIL) throw new Error('MW_FORCE_OCR_FAIL');
     reader = await HudReader.create(path.join(app.getPath('userData'), 'tessdata'));
     ocrErro = '';
+    console.log('[ocr] pronto');
     clearInterval(retryTimer); retryTimer = undefined;
     emit();
   } catch (e) {
+    console.log('[ocr] falhou: ' + (e instanceof Error ? e.message : String(e)));
     console.error('OCR indisponível, nova tentativa em 30 s', e);
     ocrErro = OCR_MSG;
     emit();
@@ -383,6 +387,7 @@ async function initReader() {
 }
 
 app.whenReady().then(async () => {
+  console.log('[app] ' + (app.isPackaged ? 'empacotado' : 'dev') + ' v' + app.getVersion());
   store = new Store(app.getPath('userData'));
   cfg = store.load();
   alvo = cfg.janelaJogo;
