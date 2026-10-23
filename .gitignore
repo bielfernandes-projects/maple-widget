@@ -3,3 +3,8 @@ dist
 out
 release
 .superpowers
+
+# fixtures com conteúdo de terceiros (screenshots do jogo e páginas do meowdb): ficam só na sua máquina
+tests/fixtures/screens/
+tests/fixtures/guides/
+.tmpdb/

@@ -4,10 +4,11 @@ import path from 'node:path';
 import { HudReader, DEFAULT_REGIONS, expSamples, readExpDigits, type Templates } from '../src/capture/hud';
 import { decodeJpeg, crop } from '../src/capture/image';
 import type { Img } from '../src/types';
+import { TEM } from './fixtures';
 
 const dir = path.join(__dirname, 'fixtures/screens');
 type Exp = { level?: number; expAbs?: number; expPct?: number; cls?: string; map?: string };
-const expected: Record<string, Exp> = JSON.parse(fs.readFileSync(path.join(dir, 'expected.json'), 'utf8'));
+const expected: Record<string, Exp> = TEM.screens ? JSON.parse(fs.readFileSync(path.join(dir, 'expected.json'), 'utf8')) : {};
 const norm = (s?: string) => (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const load = (f: string) => decodeJpeg(fs.readFileSync(path.join(dir, f)));
 
@@ -25,7 +26,7 @@ function resample(img: Img, w: number, h: number): Img {
   return { w, h, data };
 }
 
-describe('templates de digitos do EXP: leave-one-out (fora da amostra)', () => {
+describe.skipIf(!TEM.screens)('templates de digitos do EXP: leave-one-out (fora da amostra)', () => {
   it('nunca devolve valor errado; acerta pelo menos o limite honesto', () => {
     const files = Object.keys(expected).filter((f) => expected[f].expAbs !== undefined && expected[f].expPct !== undefined);
     const crops = Object.fromEntries(files.map((f) => [f, crop(load(f), DEFAULT_REGIONS.exp)]));
@@ -46,7 +47,7 @@ describe('templates de digitos do EXP: leave-one-out (fora da amostra)', () => {
   });
 });
 
-describe('reader em copia reamostrada (outra resolucao): correto ou undefined, nunca errado', () => {
+describe.skipIf(!TEM.screens)('reader em copia reamostrada (outra resolucao): correto ou undefined, nunca errado', () => {
   let reader: HudReader;
   beforeAll(async () => { reader = await HudReader.create(path.join(__dirname, '../out/tessdata')); });
   afterAll(async () => { await reader.close(); });

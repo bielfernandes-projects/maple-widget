@@ -8,7 +8,8 @@ import { loadSource } from '../src/sources/load';
 import { Store, DEFAULT_CONFIG } from '../src/store';
 
 const D = ['meowdb.com', 'niadb.com'];
-const html = fs.readFileSync(path.join(__dirname, 'fixtures/guides/exp-table-level-1-to-100.html'), 'utf8');
+// tabela de EXP sintética (mesma estrutura do guia: colunas Level e Exp to next)
+const html = `<main><h1>EXP table</h1><table><tr><th>Level</th><th>Exp to next</th></tr>${Array.from({ length: 100 }, (_, i) => `<tr><td>${i + 1}</td><td>${(i + 1) * 15}</td></tr>`).join('')}</table></main>`;
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mw-'));
 const ok = (body: string) => (async () => new Response(body, { status: 200 })) as unknown as typeof fetch;
 const fail = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;

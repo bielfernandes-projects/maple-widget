@@ -1,80 +1,107 @@
 # Maple Widget
 
-Overlay (widget) para Windows que acompanha o seu personagem no **MapleStory Classic** e diz, em tempo real, se o seu ritmo de EXP está bom. Ele não mexe no jogo: só olha a tela.
+Widget flutuante para **Windows** que acompanha o seu personagem no **MapleStory Classic World** e responde, sem você sair do jogo:
 
-## Como funciona
+- **Meu ritmo de EXP está bom?** Um semáforo (verde / amarelo / vermelho) compara o seu EXP/h com o melhor mapa de grind para o seu level.
+- **Subi de level, e agora?** Um cartão mostra o que fazer com os pontos de **AP e SP** da sua classe.
+- **Onde eu treino e que quests faço?** Mapas e quests recomendados para o seu level, com ícones de mobs e NPCs.
+- **Onde esse mob aparece?** Uma **busca** por monstros, mapas, NPCs e itens (atalho `Ctrl+Alt+F`).
 
-1. **Captura de tela** apenas da janela do jogo (captura nativa do Windows, sem ler memória nem injetar nada).
-2. **OCR do HUD** (Tesseract) lê nível, EXP e mapa a cada poucos segundos.
-3. **Guias** do meowdb são sincronizados automaticamente pelo sitemap do site (todos os guias do MapleStory Classic do meowdb; hoje na casa de três dezenas, e o número aparece na aba Fontes) e as quests vêm do Quest Database. Você também pode adicionar links extras.
-4. **Conselheiro**, com três frentes:
-   - **Mapas de grind:** compara os mapas dos guias com a sua faixa de nível.
-   - **Quests:** lista as quests úteis para o seu nível, com ícone do NPC e ✓ para marcar como feita.
-   - **Cartão de level up:** ao subir de nível, mostra dicas de AP/SP (filtradas pela sua classe) e um botão "Abrir guia".
-5. **Veredito** em cores, comparando o seu EXP/h com o "Max EXP/hr" do guia do melhor mapa:
-   verde = seu EXP/h é ≥ 70 % do EXP/h máximo do melhor mapa do seu level no guia, amarelo = ≥ 40 %, vermelho = abaixo de 40 %, cinza = sem dados ou sem leitura. O tooltip da bolinha mostra o "% do ideal". O valor do guia é um teto, não uma média.
+Ele **só olha a tela**: não mexe no jogo, não lê a memória e não injeta nada. Os dados vêm dos guias e do banco de dados do [meowdb](https://meowdb.com/msclassic).
 
-## Como rodar
+> Projeto pessoal e não oficial. Não tem relação com a Nexon, com o MapleStory nem com o meowdb. Leia a seção [Cuidados](#cuidados-leia-antes-de-usar).
 
-```bash
-npm install
-npm start        # compila e abre o app
-```
+---
 
-## Como gerar o executável
+## Baixar e usar
 
-```bash
-npm run dist     # gera release/Maple Widget <versão>.exe (portable, sem instalador)
-```
+1. Abra a página de [**Releases**](../../releases/latest) e baixe o arquivo **`Maple-Widget-0.1.0-win-x64.zip`**.
+2. Extraia o zip e abra **`Maple Widget 0.1.0.exe`**. É portátil: não instala nada.
+3. **O Windows vai avisar** ("O Windows protegeu o computador"), porque o programa não tem assinatura digital paga. Clique em **Mais informações → Executar assim mesmo**. O código-fonte está neste repositório para você conferir.
+4. Siga o assistente de configuração (abaixo).
 
-O `.exe` não é assinado; o Windows SmartScreen pode avisar na primeira execução ("Mais informações" → "Executar mesmo assim").
+**Requisitos:** Windows 10/11 (64 bits), MapleStory Classic em **modo janela ou borderless** e internet na primeira abertura.
 
-## Primeira execução
+### Assistente de configuração (4 passos)
 
-1. O modelo do OCR (`eng.traineddata`, Tesseract, Apache-2.0) vem junto com o app: a leitura da tela funciona sem internet desde o primeiro início. A internet só é usada para baixar os guias (veja "Privacidade e segurança").
-2. O **assistente** ("Configuração inicial") tem 4 passos:
-   1. **Pasta do jogo:** padrão `C:\Nexon\Library\maplestorycw`; o app confere se a pasta existe e você pode escolher outra.
-   2. **Janela do jogo:** escolha a janela do MapleStory na lista ou "Detectar automaticamente".
-   3. **Calibrar HUD:** sobre uma imagem do jogo (captura ao vivo se o jogo estiver aberto), arraste um retângulo sobre cada área, na ordem: LEVEL, CLASSE/nick, EXP e MAPA. "Desfazer último retângulo" corrige o último. Com captura ao vivo nativa aparece o botão **"Detectar escala"** (útil com escala de DPI do Windows). Também é possível "Pular calibração".
-   4. **Guias:** explica a sincronização automática e tem "Sincronizar agora"; "Concluir" salva.
-3. "Pular configuração" (passo 1) é lembrado: o assistente não reabre a cada execução. Para refazer, use a aba **Fontes → Recalibrar HUD**.
+1. **Pasta do jogo:** o padrão é `C:\Nexon\Library\maplestorycw`. Escolha outra se a sua for diferente.
+2. **Janela do jogo:** escolha a janela do MapleStory na lista (ou "Detectar automaticamente"). Se ela não aparecer, o jogo está **minimizado** — restaure-o e clique em **Atualizar lista**.
+3. **Calibrar HUD:** deixe o jogo **visível, na tela do personagem**, clique em **Capturar em 5 s** e clique na janela do jogo durante a contagem. Na imagem, arraste um retângulo sobre cada item, nesta ordem: **LEVEL**, **CLASSE/nick**, **EXP** e **MAPA**. Se a leitura sair errada, use **Detectar escala**.
+4. **Guias:** sincroniza os guias do meowdb. **Concluir** salva.
 
-## Atalhos
+O jogo minimiza quando perde o foco; por isso a captura é feita depois da contagem, e o widget fica sempre por cima (não some quando você clica nele).
+
+### Atalhos
 
 | Atalho | Ação |
 |---|---|
+| `Ctrl+Alt+F` | abrir a busca |
 | `Ctrl+Alt+M` | mostrar / ocultar o widget |
-| `Ctrl+Alt+C` | ligar / desligar o click-through (cliques atravessam o widget) |
-| `Ctrl+Alt+Q` | sair do Maple Widget (o mesmo que o botão ✕ no topo do widget) |
+| `Ctrl+Alt+C` | click-through (os cliques atravessam o widget) |
+| `Ctrl+Alt+Q` | sair (o mesmo que o botão ✕) |
 
-Posição e opacidade do widget são lembradas entre execuções. Se a posição salva ficar fora das telas (ex.: o 2º monitor foi desligado), o widget volta para o canto superior direito da tela principal. Abrir o `.exe` de novo com o widget já aberto não cria um segundo widget: só traz o atual para a frente.
+Dá para **arrastar** o widget pela barra de cima e **redimensionar** pelo canto inferior direito. Posição e opacidade são lembradas.
 
-## Sincronização
+---
 
-A aba **Fontes** tem a sincronização automática (ligar/desligar), o ⟳ para sincronizar agora, um campo para links extras (só `https://` do meowdb/niadb) e ✕ para remover um link extra. Com a sincronização **desligada** o app carrega **só os links extras**: os guias do sitemap e o Quest Database deixam de ser carregados.
+## O que ele mostra
 
-## Logs
+- **Agora:** level, barra de EXP, EXP/h e o veredito. Verde: seu EXP/h é ≥ 70% do máximo do melhor mapa do seu level; amarelo: ≥ 40%; vermelho: abaixo; cinza: sem dados. O valor do guia é um **teto**, não uma média.
+- **Quests / Mapas:** o que vale a pena no seu level, vindo dos guias e do Quest Database do meowdb (~340 quests). Dá para marcar quests como feitas.
+- **Buscar:** monstros (level, EXP, HP e **em quais mapas aparecem**), mapas (que monstros têm), NPCs (quests deles) e itens (abre a página do item no meowdb, onde aparece quem dropa).
+- **Fontes:** todos os guias do meowdb entram sozinhos e se mantêm atualizados. Você pode colar links extras (só `https://` do meowdb/niadb).
+- **Level up:** cartão com dicas de **AP e SP** da sua classe e botão para abrir o guia.
 
-O app grava um registro em `log.txt` na pasta `userData` (veja abaixo), com data e hora em cada linha; o arquivo é aparado no início (fica com o final se passar de 200 KB e recomeça se passar de 1 MB). Contém só mensagens do app e de erro (nada de imagens nem dados de conta). Se algo der errado, envie esse arquivo.
+---
+
+## Cuidados (leia antes de usar)
+
+- **Uso por sua conta e risco.** Programas que se conectam a jogos podem violar os termos de uso. Este **não** injeta código, não lê a memória do jogo, não automatiza teclas nem mouse: só captura a imagem da janela do jogo (como um gravador de tela) e faz OCR. Ainda assim, **não há garantia** de que a Nexon aceite; use sabendo disso.
+- **Não é oficial.** Não há ligação com a Nexon nem com o meowdb. *MapleStory* e seus nomes, imagens e dados pertencem aos respectivos donos.
+- **Os dados são do meowdb.** O widget baixa páginas públicas do site, com pouca frequência, em baixa concorrência e guardando cache local. Ícones dos mobs são carregados do próprio site, na hora. Respeite o site: se for mexer no código de sincronização, não aumente o ritmo das requisições.
+- **Privacidade.** A imagem do jogo fica só na memória e nunca é salva nem enviada. A rede é usada apenas para meowdb/niadb (lista de permissão). Textos vindos da rede são exibidos como texto simples.
+- **Windows SmartScreen.** O executável não é assinado, então o aviso é esperado. Baixe **somente** pela página de Releases deste repositório.
+- **Tela cheia exclusiva não funciona** (a captura sai preta). Use **janela** ou **borderless**.
+- **Resolução e DPI.** O OCR foi validado em **1366×768** e **1920×1080**. Outras resoluções ou escala de DPI do Windows podem exigir recalibração (**Detectar escala** ajuda). A calibração é guardada por resolução.
+- **Leitura por OCR pode errar.** Confira os números na primeira vez; se algo estiver estranho, recalibre em **Fontes → Recalibrar HUD**.
+- **Primeira abertura:** baixa a base do meowdb (cerca de 200 páginas de monstros e 3 índices). Pode levar alguns minutos; a busca já funciona com o que foi baixado.
+
+---
 
 ## Onde ficam os dados
 
-Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPDATA%\maple-widget`): `config.json` (janela, calibração, escala, fontes extras, posição, opacidade), `log.txt` (registro do app), `guias\` (guias e quests para uso offline: um `.json` por fonte, com nome em hash, mais o `auto-index.json` da sincronização automática) e `tessdata\` (cópia de trabalho do `eng.traineddata`, 5,2 MB, feita a partir do modelo que vem no app — nada é baixado). Versões anteriores guardavam os guias em `cache\`, que no Windows é a mesma pasta `Cache\` do Chromium; no primeiro início desta versão os `.json` de lá são copiados para `guias\` (a pasta antiga não é alterada). Apagar a pasta reinicia o assistente.
+Em `%APPDATA%\maple-widget`: `config.json` (janela, calibração, fontes extras), `log.txt` (registro do app, sem imagens nem dados de conta), `guias\` e `gamedb.json` (cache dos dados do meowdb). Apagar a pasta reinicia o assistente. Se algo der errado, o `log.txt` ajuda a entender.
 
-## Modos suportados e limites conhecidos
+## Limitações conhecidas
 
-- **Janela** e **borderless (janela sem bordas)** funcionam. **Tela cheia exclusiva não pode ser capturada**: use modo janela ou borderless.
-- O OCR foi validado com pixels nativos do HUD em **1366×768** e **1920×1080**. Outras resoluções podem exigir recalibração (a calibração é guardada por resolução).
-- Jogo com escala de DPI do Windows pode ler errado: use "Detectar escala" no assistente ou a opção de compatibilidade de alto DPI do Windows no executável do jogo (sugestão, não testada com o jogo).
-- A janela do jogo é detectada pelo título ou escolhida no assistente.
-- Sem internet, o app usa o cache; a aba Fontes mostra o erro de sincronização. Se o site responder mas a página não tiver dados reconhecíveis (mudança de layout), o cache bom é mantido e a fonte aparece com erro. Se o sitemap mudar de estrutura, o aviso é "O sitemap do site mudou (sem guias reconhecidos); usando guias em cache.".
-- Sem calibração salva para a resolução atual do jogo, o widget avisa "Sem calibração para LxA — usando posições padrão. Fontes → Recalibrar HUD.".
+- Os drops de itens não aparecem na busca: o meowdb os carrega só no navegador. O botão "Abrir no meowdb" leva à página do item.
+- Só inglês (como os dados do meowdb usados).
+- O exe tem ~440 MB descompactado (o OCR e o Chromium vêm junto).
 
-## Privacidade e segurança
+---
 
-- Não lê memória do jogo, não injeta código, não automatiza entradas.
-- Captura somente a janela escolhida, e a imagem fica só na memória (não é salva nem enviada).
-- Acesso à rede: só os guias, quests e ícones do meowdb e do niadb (lista de permissão; outros links são rejeitados). Nada mais: o modelo do OCR vem embutido no app (`resources\tessdata`) e não é baixado.
-- Textos externos são exibidos como texto simples (nunca como HTML).
+## Para desenvolvedores
 
-Checklist de teste manual: [docs/teste-com-o-jogo.md](docs/teste-com-o-jogo.md).
+```bash
+npm install
+npm start          # compila e abre o app
+npm test           # vitest
+npm run typecheck  # tsc --noEmit
+npm run dist       # gera release/Maple Widget <versão>.exe (portátil)
+```
+
+Stack: **Electron + TypeScript**, esbuild, vitest, cheerio, tesseract.js e *template matching* para os dígitos do EXP.
+
+- `src/capture/` captura nativa (janela oculta com `getDisplayMedia`), leitura da HUD e OCR
+- `src/sources/` guias (sitemap incremental) e a base do jogo (monstros, mapas, NPCs, itens)
+- `src/advisor.ts`, `src/tracker.ts`, `src/search.ts` regras puras (sem Electron), todas testadas
+- `src/main/` processo principal, validação de IPC e preload · `src/renderer/` interface
+- `docs/superpowers/` especificação e plano de implementação · `docs/teste-com-o-jogo.md` roteiro de teste manual
+
+**Fixtures:** screenshots do jogo e cópias de páginas do meowdb **não** estão no repositório (conteúdo de terceiros). Os testes que dependem deles são pulados; veja [tests/fixtures/README.md](tests/fixtures/README.md).
+
+O modelo do OCR (`eng.traineddata`, Tesseract) vem em `resources/tessdata` sob a licença Apache-2.0 (arquivo de licença junto).
+
+## Créditos
+
+[meowdb / NiaDB](https://meowdb.com/msclassic) (dados e guias), [Tesseract](https://github.com/tesseract-ocr/tesseract), [Electron](https://www.electronjs.org/).

@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseGuide } from '../src/sources/parser';
+import { TEM } from './fixtures';
 
 const load = (s: string) => fs.readFileSync(path.join(__dirname, 'fixtures/guides', s + '.html'), 'utf8');
 const base = 'https://meowdb.com/msclassic/guides/';
 
 describe('parseGuide', () => {
-  it('grind maps', () => {
+  it.skipIf(!TEM.guides)('grind maps', () => {
     const g = parseGuide(load('best-grind-maps-every-level'), base + 'best-grind-maps-every-level');
     expect(g.maps.length).toBeGreaterThan(10);
     expect(g.maps[0]).toMatchObject({ name: 'L Forest I', maxExpHr: 333525 });
@@ -16,12 +17,12 @@ describe('parseGuide', () => {
     expect(line1.maxExpHr).toBe(640000);
     expect(line1.mob.name).toBe('Bubbling');
   });
-  it('exp table', () => {
+  it.skipIf(!TEM.guides)('exp table', () => {
     const g = parseGuide(load('exp-table-level-1-to-100'), base + 'exp-table-level-1-to-100');
     expect(g.expRows.length).toBeGreaterThanOrEqual(99);
     expect(g.expRows[0]).toEqual({ level: 1, toNext: 15 });
   });
-  it('quests e dicas de AP no beginner guide', () => {
+  it.skipIf(!TEM.guides)('quests e dicas de AP no beginner guide', () => {
     const g = parseGuide(load('beginners-guide-first-steps-in-maple-world'), base + 'beginners-guide-first-steps-in-maple-world');
     const sera = g.quests.find((q) => q.name === "Sera's Mirror")!;
     expect(sera).toMatchObject({ id: '1000', npc: 'Heena', level: 1, exp: 2 });
@@ -73,7 +74,7 @@ describe('parseGuide', () => {
     expect(x.length).toBeLessThanOrEqual(1501);
     expect(x.endsWith('…')).toBe(true);
   });
-  it('fixtures: sem mapas 1-100 e exp unico', () => {
+  it.skipIf(!TEM.guides)('fixtures: sem mapas 1-100 e exp unico', () => {
     const m = parseGuide(load('best-grind-maps-every-level'), base + 'x').maps;
     expect(m.some((x) => x.levelMin === 1 && x.levelMax === 100)).toBe(false);
     expect(m.length).toBe(32);
@@ -105,7 +106,7 @@ describe('parseGuide — Quest Database', () => {
     const g = parseGuide('<main><h1>t</h1><table><tr><th>Level</th><th>EXP to next</th></tr><tr><td>1</td><td>15</td></tr></table></main>', url);
     expect([g.quests.length, g.expRows.length]).toEqual([0, 1]);
   });
-  it('fixture real reduzida: >= 35 quests com nome limpo, level e EXP numéricos', () => {
+  it.skipIf(!TEM.guides)('fixture real reduzida: >= 35 quests com nome limpo, level e EXP numéricos', () => {
     const real = fs.readFileSync(path.join(__dirname, 'fixtures/guides/quest-database.html'), 'utf8');
     const g = parseGuide(real, url);
     expect(g.quests.length).toBeGreaterThanOrEqual(35);
@@ -141,7 +142,7 @@ describe('parseGuide — Quest Database: ids e recompensas', () => {
     const g = parseGuide('<main><h1>t</h1><table><tr><th>Level</th><th>Quest</th><th>EXP</th><th>EXP to next</th></tr><tr><td>1</td><td>q</td><td>5</td><td>15</td></tr></table></main>', url);
     expect([g.quests.length, g.expRows.length]).toEqual([0, 1]);
   });
-  it('(f) fixture real: ids únicos e numéricos', () => {
+  it.skipIf(!TEM.guides)('(f) fixture real: ids únicos e numéricos', () => {
     const real = fs.readFileSync(path.join(__dirname, 'fixtures/guides/quest-database.html'), 'utf8');
     const ids = parseGuide(real, url).quests.map((q) => q.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -157,7 +158,7 @@ describe('mob icon em mapas de grind', () => {
     expect(m.mob.iconUrl).toBe('https://meowdb.com/msclassic/monsters/sprites/mob_10.png');
     expect(m.mob.id).toBe('10');
   });
-  it('fixture real: todo mapa tem iconUrl', () => {
+  it.skipIf(!TEM.guides)('fixture real: todo mapa tem iconUrl', () => {
     const r = parseGuide(load('best-grind-maps-every-level'), 'https://meowdb.com/msclassic/guides/best-grind-maps-every-level');
     expect(r.maps.length).toBeGreaterThan(0);
     expect(r.maps.filter((m) => !m.mob.iconUrl)).toEqual([]);

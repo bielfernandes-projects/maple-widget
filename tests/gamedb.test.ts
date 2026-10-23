@@ -1,13 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs';
 import { parseMonster, parseIndice, parseSitemapMonstros, syncDb } from '../src/sources/gamedb';
 import { buscar } from '../src/search';
 import { validConsulta } from '../src/main/validate';
 import type { GameDb, Monster } from '../src/types';
 
-const fx = (n: string) => fs.readFileSync(path.join(__dirname, 'fixtures', 'db', n), 'utf8');
+// HTML sintético com a mesma estrutura das páginas do meowdb (nada copiado do site)
+const LOCAIS = [
+  ['000000042', 'Snail Hunting Ground III', 'Maple Road', 21], ['000000050', 'A Split Road', 'Maple Road', 17], ['000000060', 'Snail Garden', 'Rainbow Street', 19],
+] as const;
+const monstroHtml = (nome: string, lv: number, exp: number, hp: number) => `<html><head><title>${nome} - MapleStory Classic | NiaMeowDB</title>
+<meta property="og:image" content="https://og.meowdb.com/og?title=${encodeURIComponent(nome)}&subtitle=HP+${hp}+%C2%B7+EXP+${exp}&eyebrow=NiaMeowDB+%C2%B7+Monster+%C2%B7+Lv+${lv}"/></head>
+<body><h1>${nome}</h1><table><thead><tr><th>Map</th><th>Count↓</th><th>Share↓</th><th>Types↓</th><th>Mob Rate</th><th>Respawn</th></tr></thead><tbody>
+${LOCAIS.map(([id, m, r, q]) => `<tr><td><a href="/msclassic/maps/${id}">${m}</a><span>${r}</span></td><td>${q}</td><td>${q}/60 35%</td><td>3</td><td>1.0x</td><td>~7.5s</td></tr>`).join('')}
+</tbody></table></body></html>`;
+const lista = (tipo: string, itens: [string, string, string?][]) => '<ul>' + itens.map(([id, nome, info]) => `<li><a href="/msclassic/${tipo}/${id}">${nome}${info ? `<span> (${info})</span>` : ''}</a></li>`).join('') + '</ul>';
+const IDX = {
+  maps: lista('maps', [['000000010', 'Mushroom Town', 'town'], ['000000042', 'Snail Hunting Ground III'], ['000000050', 'A Split Road']]),
+  npcs: lista('npcs', [['402', 'Alex', 'Kerning City'], ['1111', 'Alcaster', 'El Nath Market']]),
+  itens: lista('item-db', [['1157', 'Blue Jean Shorts'], ['1156', 'Blue-Striped Boxers'], ['5', 'Snail Shell']]),
+};
+const fx = (n: string) => ({ 'monsters-3.html': monstroHtml('Blue Snail', 2, 4, 51), 'maps-all.html': IDX.maps, 'npcs-all.html': IDX.npcs, 'item-db-all.html': IDX.itens } as Record<string, string>)[n];
 const URL1 = 'https://meowdb.com/msclassic/monsters/3';
 
 describe('parseMonster', () => {
@@ -15,7 +30,7 @@ describe('parseMonster', () => {
     const m = parseMonster(fx('monsters-3.html'), URL1)!;
     expect(m.name).toBe('Blue Snail');
     expect([m.level, m.exp, m.hp]).toEqual([2, 4, 51]);
-    expect(m.locais.length).toBe(41);
+    expect(m.locais.length).toBe(3);
     expect(m.locais[0]).toMatchObject({ mapaId: '000000042', mapa: 'Snail Hunting Ground III', regiao: 'Maple Road', qtd: 21 });
     expect(m.iconUrl).toBe('https://meowdb.com/msclassic/monsters/sprites/mob_3.png');
   });
@@ -28,7 +43,7 @@ describe('parseMonster', () => {
 describe('parseIndice', () => {
   it('mapas, NPCs e itens', () => {
     const mapas = parseIndice(fx('maps-all.html'), 'mapa');
-    expect(mapas.length).toBe(40);
+    expect(mapas.length).toBe(3);
     expect(mapas.find((e) => e.nome === 'Mushroom Town')?.info).toBe('town');
     const npcs = parseIndice(fx('npcs-all.html'), 'npc');
     expect(npcs.find((e) => e.nome === 'Alcaster')?.info).toBe("El Nath Market");
@@ -119,7 +134,7 @@ describe('syncDb', () => {
     const a = await syncDb({ ...base, fetchFn: mkFetch(c1) });
     expect(a.offline).toBe(false);
     expect(a.monstros.map((m) => m.name)).toEqual(['Blue Snail']);
-    expect(a.entradas.length).toBe(120);
+    expect(a.entradas.length).toBe(8);
     expect(c1.length).toBe(5); // sitemap + 1 monstro + 3 índices
     const b = await syncDb({ ...base, fetchFn: mkFetch(c2) });
     expect(c2).toEqual([base.sitemapUrl]); // só o sitemap

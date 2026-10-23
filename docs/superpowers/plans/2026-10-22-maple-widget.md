@@ -60,7 +60,7 @@ tests/*.test.ts  tests/fixtures/screens/*.jpg + expected.json  tests/fixtures/gu
 - [ ] **Step 1: Inicializar repo e dependências**
 
 ```bash
-cd "C:/Users/Gabriel Fernandes/OneDrive - LEMA/Desktop/Pessoal/maple-widget"
+cd maple-widget
 git init
 npm init -y
 npm i cheerio tesseract.js pngjs jpeg-js

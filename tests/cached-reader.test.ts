@@ -5,6 +5,7 @@ import { LeitorComCache, fnv1a } from '../src/capture/cached-reader';
 import { HudReader, DEFAULT_REGIONS, type Campo } from '../src/capture/hud';
 import { decodeJpeg } from '../src/capture/image';
 import type { Img, Reading, Regions } from '../src/types';
+import { TEM } from './fixtures';
 
 const R: Regions = {
   level: { x: 0, y: 0, w: 0.25, h: 0.5 }, cls: { x: 0.25, y: 0, w: 0.25, h: 0.5 },
@@ -112,9 +113,9 @@ describe('LeitorComCache', () => {
 });
 
 // integração: o HudReader real nas 12 screenshots, cada uma lida duas vezes pelo cache = leitura direta
-describe('LeitorComCache com HudReader real', () => {
+describe.skipIf(!TEM.screens)('LeitorComCache com HudReader real', () => {
   const dir = path.join(__dirname, 'fixtures/screens');
-  const files = Object.keys(JSON.parse(fs.readFileSync(path.join(dir, 'expected.json'), 'utf8')));
+  const files = TEM.screens ? Object.keys(JSON.parse(fs.readFileSync(path.join(dir, 'expected.json'), 'utf8'))) : [];
   let reader: HudReader;
   beforeAll(async () => { reader = await HudReader.create(path.join(__dirname, '../out/tessdata')); });
   afterAll(async () => { await reader.close(); });
