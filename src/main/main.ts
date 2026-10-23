@@ -2,7 +2,7 @@ import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, s
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { HudReader, DEFAULT_REGIONS } from '../capture/hud';
+import { HudReader, DEFAULT_REGIONS, quadroValeParaRegioes, regioesDoQuadro } from '../capture/hud';
 import { LeitorComCache } from '../capture/cached-reader';
 import { bgraToImg, decodeJpeg, isBlack, montarImg, toPngBuffer } from '../capture/image';
 import { escalasCandidatas, resizeImg } from '../capture/scale';
@@ -12,6 +12,7 @@ import { makeExpToNext } from '../advisor';
 import { isAllowedUrl } from '../sources/allowlist';
 import { loadSource } from '../sources/load';
 import { syncAuto } from '../sources/sync';
+import { migrarCacheGuias } from '../sources/migrar';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
 import { validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validRecortes, validRegions, validResKey } from './validate';
@@ -47,8 +48,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // captura nativa (janela oculta + getDisplayMedia): só o último quadro importa, nunca uma fila
 let cap: BrowserWindow | undefined;
-// ultimoFrame: quadro montado só com os recortes da HUD (resto zerado); preta = todos os recortes pretos
-let ultimoFrame: { img: Img; t: number; preta: boolean } | null = null;
+// ultimoFrame: quadro montado só com os recortes da HUD (resto zerado); preta = todos os recortes pretos;
+// regioes = JSON das regiões com que foi montado (depois de uma calibração nova ele não serve mais)
+let ultimoFrame: { img: Img; t: number; preta: boolean; regioes: string } | null = null;
 // quadro inteiro pedido sob demanda (assistente/autoescala); consumido e solto logo depois
 let ultimoCompleto: { img: Img; t: number } | null = null;
 // regiões enviadas à capturadora (JSON) e sua versão: recortes de outra versão são descartados
@@ -63,7 +65,8 @@ const lib = (): Library => ({
   maps: data.flatMap((d) => d.maps), quests: data.flatMap((d) => d.quests),
   expRows: data.flatMap((d) => d.expRows), tips: data.flatMap((d) => d.tips),
 });
-const cacheDir = () => path.join(app.getPath('userData'), 'cache');
+// guias na pasta "guias": "cache" era a mesma pasta do "Cache" do Chromium (NTFS não diferencia maiúsculas)
+const cacheDir = () => path.join(app.getPath('userData'), 'guias');
 const resKey = (i: Img) => `${i.w}x${i.h}`;
 
 function rebuildTracker() {
@@ -113,14 +116,21 @@ function escolherFonte<T extends { name: string }>(srcs: T[], janela: string): T
   return nome === undefined ? undefined : srcs.find((x) => x.name === nome);
 }
 const quadroNativo = () => (ultimoFrame && Date.now() - ultimoFrame.t <= QUADRO_VELHO_MS ? ultimoFrame : null);
-async function captureGame(): Promise<{ img: Img; preta: boolean } | null> {
+async function captureGame(): Promise<{ img: Img; preta: boolean; regioes?: string } | null> {
   if (!nativaFalhou) return quadroNativo();
   const img = await capturarMiniatura();
   return img && { img, preta: isBlack(img) };
 }
 const enviarCmd = (c: unknown) => { if (cap && !cap.isDestroyed()) cap.webContents.send('cap:cmd', c); };
-// quadro inteiro da stream atual: pede um e espera até `ms` (null se não vier)
-async function quadroCompleto(ms: number): Promise<Img | null> {
+// quadro inteiro da stream atual: pede um e espera até `ms` (null se não vier).
+// Pedidos em fila: o assistente e a autoescala nunca pegam o quadro um do outro.
+let filaCompleto: Promise<unknown> = Promise.resolve();
+function quadroCompleto(ms: number): Promise<Img | null> {
+  const p = filaCompleto.then(() => pedirQuadroCompleto(ms));
+  filaCompleto = p.catch(() => {});
+  return p;
+}
+async function pedirQuadroCompleto(ms: number): Promise<Img | null> {
   const desde = Date.now();
   setTimeout(() => enviarCmd('quadroCompleto'), 0); // depois de um 'iniciar' já agendado (trocarAlvo), nunca antes
   for (let i = 0; i < ms / 250 && !(ultimoCompleto && ultimoCompleto.t >= desde); i++) await sleep(250);
@@ -137,7 +147,7 @@ async function quadroDe(j: string): Promise<{ img: Img | null; nativa: boolean }
 }
 // regiões do quadro w×h (normalizadas; a escala é uniforme e aplicada no main depois de montar)
 function conferirRegioes(w: number, h: number): boolean {
-  const js = JSON.stringify(cfg.regions[`${w}x${h}`] ?? DEFAULT_REGIONS);
+  const js = JSON.stringify(regioesDoQuadro(cfg.regions, w, h));
   if (js === regioesEnviadas) return true;
   regioesEnviadas = js; versaoRegioes++;
   const r = JSON.parse(js) as typeof DEFAULT_REGIONS;
@@ -156,7 +166,7 @@ function reiniciarCaptura(ms = REINICIO_MS) {
   clearTimeout(reinicioTimer);
   reinicioTimer = setTimeout(() => { reinicioTimer = undefined; iniciarCaptura(); }, ms);
 }
-function trocarAlvo(j: string) { if (j !== alvo) { alvo = j; ultimoFrame = null; recuo = 0; reiniciarCaptura(0); } }
+function trocarAlvo(j: string) { if (j !== alvo) { alvo = j; ultimoFrame = null; ultimoCompleto = null; recuo = 0; reiniciarCaptura(0); } }
 
 const CAP_FILE = () => path.join(__dirname, 'capturer.html');
 const daCapturadora = (wc: WebContents) => !!cap && !cap.isDestroyed() && wc === cap.webContents;
@@ -214,7 +224,7 @@ function registrarCaptura() {
       // recortes com regiões de outra chave/versão (corrida com uma troca de regiões) são descartados
       if (conferirRegioes(msg.w, msg.h) && msg.versao === versaoRegioes) {
         const rs = msg.recortes.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h, data: new Uint8ClampedArray(r.buffer) }));
-        ultimoFrame = { img: montarImg(msg.w, msg.h, rs), t: Date.now(), preta: rs.length > 0 && rs.every(isBlack) };
+        ultimoFrame = { img: montarImg(msg.w, msg.h, rs), t: Date.now(), preta: rs.length > 0 && rs.every(isBlack), regioes: regioesEnviadas };
       }
     } else { console.warn('[captura] quadro inválido descartado'); return; }
     nativaFalhou = false; quadros++; recuo = 0;
@@ -254,13 +264,15 @@ async function tick() {
   try {
     const q = await captureGame(), img = q?.img;
     flags = { capturaPreta: false, jogoNaoEncontrado: !img };
-    if (q && img) {
+    // nativo montado com regiões antigas (calibração recém-salva): não lê zeros; os recortes novos já foram pedidos
+    const velho = !!img && q?.regioes !== undefined && !quadroValeParaRegioes(q.regioes, cfg.regions, img.w, img.h);
+    if (q && img && !velho) {
       if (q.preta) flags.capturaPreta = true;
       else if (leitor) {
         // chave = quadro bruto; regiões normalizadas não mudam com escala uniforme.
         // ponytail: resizeImg percorre o quadro esparso inteiro (só quando há escala ≠ 1); reescalar só os recortes se pesar
         const key = resKey(img), esc = cfg.escalas[key];
-        const r = await leitor.read(esc ? resizeImg(img, esc) : img, cfg.regions[key] ?? DEFAULT_REGIONS);
+        const r = await leitor.read(esc ? resizeImg(img, esc) : img, regioesDoQuadro(cfg.regions, img.w, img.h));
         estado = tracker.push({ ...r, t: Date.now() });
       }
     }
@@ -398,6 +410,8 @@ function registerIpc() {
       if (typeof key !== 'string' || !validResKey(key)) return { ok: false, erro: 'Resolução da captura inválida.' };
       if (!validRegions(regions)) return { ok: false, erro: 'Regiões da HUD inválidas.' };
       cfg.regions[key] = regions;
+      // reenvia já as regiões para a capturadora (o quadro esparso atual deixa de valer: ver quadroValeParaRegioes)
+      if (ultimoFrame) conferirRegioes(ultimoFrame.img.w, ultimoFrame.img.h);
     }
     cfg.gamePath = gamePath as string;
     if (gamePath) cfg.assistentePulado = false;
@@ -437,6 +451,8 @@ app.whenReady().then(async () => {
   console.log('[app] ' + (app.isPackaged ? 'empacotado' : 'dev') + ' v' + app.getVersion());
   store = new Store(app.getPath('userData'));
   cfg = store.load();
+  const migrados = migrarCacheGuias(path.join(app.getPath('userData'), 'cache'), cacheDir());
+  if (migrados) console.log('[app] ' + migrados + ' arquivo(s) de guias copiados de cache para guias');
   alvo = cfg.janelaJogo;
   registerIpc();
   createWindow();

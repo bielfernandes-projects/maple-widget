@@ -4,7 +4,7 @@ Rode o `Maple Widget` (portable) com o MapleStory Classic aberto. Em cada item, 
 Na primeira execução é preciso internet (baixa os dados do OCR).
 
 ## Onde ficam os dados
-Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela foi `%APPDATA%\maple-widget\` (minúsculas, com hífen), não "Maple Widget". Lá ficam o `config.json`, `tessdata\` (`eng.traineddata`, dados do OCR, gravado no primeiro início) e, depois da primeira sincronização, os `.json` dos guias em `cache\` (no Windows é a mesma pasta `Cache\` do Chromium). Para testar do zero, apague a pasta.
+Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela foi `%APPDATA%\maple-widget\` (minúsculas, com hífen), não "Maple Widget". Lá ficam o `config.json`, `tessdata\` (`eng.traineddata`, dados do OCR, 5,2 MB, gravado no primeiro início) e, depois da primeira sincronização, `guias\` com um `.json` por guia e o `auto-index.json`. (A pasta `Cache\` é do Chromium; versões anteriores punham os guias nela, e o app copia esses `.json` para `guias\` uma vez.) Para testar do zero, apague a pasta.
 
 ## 1. Assistente, passos 1 e 2: pasta e janela do jogo
 - **Fazer:** abrir o app pela primeira vez. Passo 1: conferir a pasta (padrão `C:\Nexon\Library\maplestorycw`); tentar uma pasta inexistente. Passo 2: escolher a janela do jogo ou "Detectar automaticamente".

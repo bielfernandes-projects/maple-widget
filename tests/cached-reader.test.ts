@@ -128,3 +128,18 @@ describe('LeitorComCache com HudReader real', () => {
     }
   }, 300_000);
 });
+
+import { quadroValeParaRegioes, regioesDoQuadro } from '../src/capture/hud';
+describe('regioesDoQuadro / quadroValeParaRegioes', () => {
+  const nova = { ...DEFAULT_REGIONS, level: { x: 0.1, y: 0.1, w: 0.1, h: 0.1 } };
+  it('usa a calibração da chave WxH, senão as padrão', () => {
+    expect(regioesDoQuadro({ '800x600': nova }, 800, 600)).toBe(nova);
+    expect(regioesDoQuadro({ '800x600': nova }, 1920, 1080)).toBe(DEFAULT_REGIONS);
+  });
+  it('quadro montado com regiões antigas deixa de valer depois de salvar uma calibração', () => {
+    const montado = JSON.stringify(DEFAULT_REGIONS);
+    expect(quadroValeParaRegioes(montado, {}, 800, 600)).toBe(true);
+    expect(quadroValeParaRegioes(montado, { '800x600': nova }, 800, 600)).toBe(false);
+    expect(quadroValeParaRegioes(JSON.stringify(nova), { '800x600': nova }, 800, 600)).toBe(true);
+  });
+});

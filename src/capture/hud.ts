@@ -22,6 +22,11 @@ export const DEFAULT_REGIONS: Regions = {
   map: n(67, 41, 290, 51),
 };
 
+// regiões calibradas para o quadro bruto w×h (chave `WxH`), senão as padrão
+export const regioesDoQuadro = (calib: Record<string, Regions>, w: number, h: number): Regions => calib[`${w}x${h}`] ?? DEFAULT_REGIONS;
+// um quadro esparso montado com as regiões `montadoCom` (JSON) só serve se a calibração atual da chave for a mesma
+export const quadroValeParaRegioes = (montadoCom: string, calib: Record<string, Regions>, w: number, h: number) => montadoCom === JSON.stringify(regioesDoQuadro(calib, w, h));
+
 export function parseLevel(t: string): number | undefined {
   const d = t.replace(/\D/g, '');
   const v = d ? parseInt(d, 10) : NaN;

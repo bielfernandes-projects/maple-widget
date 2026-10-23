@@ -50,7 +50,7 @@ Posição e opacidade do widget são lembradas entre execuções.
 
 ## Onde ficam os dados
 
-Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPDATA%\maple-widget`): `config.json` (janela, calibração, escala, fontes extras, posição, opacidade), `cache\` (guias e quests para uso offline, um `.json` por fonte; no Windows é a mesma pasta `Cache\` em que o Chromium guarda o cache dele) e `tessdata\` (`eng.traineddata`, ~5 MB, baixado no primeiro início e reaproveitado depois). Apagar a pasta reinicia o assistente.
+Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPDATA%\maple-widget`): `config.json` (janela, calibração, escala, fontes extras, posição, opacidade), `guias\` (guias e quests para uso offline: um `.json` por fonte, com nome em hash, mais o `auto-index.json` da sincronização automática) e `tessdata\` (`eng.traineddata`, dados do OCR; 5,2 MB medidos, baixados no primeiro início e reaproveitados depois). Versões anteriores guardavam os guias em `cache\`, que no Windows é a mesma pasta `Cache\` do Chromium; no primeiro início desta versão os `.json` de lá são copiados para `guias\` (a pasta antiga não é alterada). Apagar a pasta reinicia o assistente.
 
 ## Modos suportados e limites conhecidos
 

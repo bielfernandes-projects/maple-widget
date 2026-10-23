@@ -29,7 +29,7 @@ const telas: CanvasRenderingContext2D[] = [];
 const pararStream = (s: MediaStream) => { s.getTracks().forEach((t) => { t.onended = null; t.stop(); }); vivos.delete(s); };
 
 function parar() {
-  gen++;
+  gen++; pedirCompleto = false; // pedido de quadro inteiro não sobrevive a parar/reiniciar (o main espera com prazo e recebe null)
   clearInterval(timer); timer = undefined;
   if (stream) pararStream(stream);
   stream = null; v.srcObject = null;
