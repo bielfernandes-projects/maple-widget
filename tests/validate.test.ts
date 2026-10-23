@@ -146,3 +146,39 @@ describe('validRecortes', () => {
     for (const x of [null, 1, 'x', {}, m('a'), m({}), m([null]), m([], { w: 0 }), m([], { w: 5000, h: 5000 }), m([], { versao: -1 }), m([], { versao: 1.5 }), m([], { versao: '1' })]) expect(validRecortes(x)).toBe(false);
   });
 });
+
+import { validAddUrl, validQuestId, posicaoVisivel } from '../src/main/validate';
+describe('validAddUrl / validQuestId', () => {
+  const D = ['meowdb.com', 'niadb.com'];
+  it('src:add exige https, domínio permitido e ≤ 500', () => {
+    expect(validAddUrl('https://meowdb.com/msclassic/guides/x', D)).toBe(true);
+    expect(validAddUrl('http://meowdb.com/msclassic/guides/x', D)).toBe(false);
+    expect(validAddUrl('https://evil.com/x', D)).toBe(false);
+    expect(validAddUrl('https://meowdb.com/' + 'a'.repeat(482), D)).toBe(false);
+    expect(validAddUrl('https://meowdb.com/' + 'a'.repeat(481), D)).toBe(true);
+    for (const x of [null, 1, {}, []]) expect(validAddUrl(x, D)).toBe(false);
+  });
+  it('quest:toggle: string de 1 a 200', () => {
+    expect(validQuestId('q-1')).toBe(true);
+    expect(validQuestId('a'.repeat(200))).toBe(true);
+    for (const x of ['', 'a'.repeat(201), null, 1, {}]) expect(validQuestId(x)).toBe(false);
+  });
+});
+
+describe('posicaoVisivel', () => {
+  const tam = { w: 340, h: 64 };
+  const prim = { x: 0, y: 0, width: 1920, height: 1040 }, seg = { x: 1920, y: 0, width: 1366, height: 728 };
+  it('mantém posição visível (inclusive no 2º monitor) e posição ausente', () => {
+    expect(posicaoVisivel({ x: 100, y: 100 }, tam, [prim, seg], prim)).toEqual({ x: 100, y: 100 });
+    expect(posicaoVisivel({ x: 2000, y: 50 }, tam, [prim, seg], prim)).toEqual({ x: 2000, y: 50 });
+    expect(posicaoVisivel({ x: -300, y: 10 }, tam, [prim], prim)).toEqual({ x: -300, y: 10 }); // 40 px ainda à vista
+    expect(posicaoVisivel({}, tam, [prim], prim)).toEqual({});
+  });
+  it('fora de todas as áreas (monitor desconectado) ou com menos de 40 px à vista: canto superior direito do principal', () => {
+    const canto = { x: 1920 - 340 - 16, y: 16 };
+    expect(posicaoVisivel({ x: 2000, y: 50 }, tam, [prim], prim)).toEqual(canto);
+    expect(posicaoVisivel({ x: -301, y: 10 }, tam, [prim], prim)).toEqual(canto);
+    expect(posicaoVisivel({ x: 100, y: 1040 - 39 }, tam, [prim], prim)).toEqual(canto);
+    expect(posicaoVisivel({ x: NaN, y: 0 }, tam, [prim], prim)).toEqual(canto);
+  });
+});

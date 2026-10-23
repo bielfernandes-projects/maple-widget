@@ -33,6 +33,24 @@ export const validJanelaJogo = (s: unknown): s is string => typeof s === 'string
 export const validOpenUrl = (url: unknown, dominios: string[]): url is string =>
   typeof url === 'string' && url.startsWith('https://') && isAllowedUrl(url, dominios);
 
+// src:add — link extra: https, domínio permitido, até 500 caracteres
+export const validAddUrl = (url: unknown, dominios: string[]): url is string =>
+  typeof url === 'string' && url.length <= 500 && validOpenUrl(url, dominios);
+export const validQuestId = (id: unknown): id is string => typeof id === 'string' && id.length >= 1 && id.length <= 200;
+
+type Rect = { x: number; y: number; width: number; height: number };
+const MIN_VISIVEL = 40;
+// posição salva da janela: mantém se a janela inteira (size) cruza alguma área de trabalho em >= 40 px nos dois eixos;
+// senão (monitor desconectado, valor inválido) vai para o canto superior direito da área principal. Sem posição salva: nada muda.
+export function posicaoVisivel(pos: { x?: number; y?: number }, size: { w: number; h: number }, areas: Rect[], principal: Rect): { x?: number; y?: number } {
+  if (pos.x === undefined && pos.y === undefined) return {};
+  const { x, y } = pos;
+  const ok = Number.isFinite(x) && Number.isFinite(y) && areas.some((a) =>
+    Math.min(x! + size.w, a.x + a.width) - Math.max(x!, a.x) >= MIN_VISIVEL &&
+    Math.min(y! + size.h, a.y + a.height) - Math.max(y!, a.y) >= MIN_VISIVEL);
+  return ok ? { x, y } : { x: principal.x + principal.width - size.w - 16, y: principal.y + 16 };
+}
+
 export const validEscala = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0.25 && n <= 4;
 
 const dimOk = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 8192;

@@ -102,3 +102,13 @@ describe('avisosExtras', () => {
     expect(buildViewModel({ ...base, estado: est(), avisosExtras: [] }).avisos).toEqual(a.avisos);
   });
 });
+
+describe('aviso de sitemap mudado', () => {
+  it('motivo sitemap usa texto próprio; offline mantém o antigo', () => {
+    const s = buildViewModel({ ...base, estado: est(), sync: { auto: true, guias: 3, ultima: 1, offline: true, motivo: 'sitemap' } });
+    expect(s.avisos).toContain('O sitemap do site mudou (sem guias reconhecidos); usando guias em cache.');
+    expect(s.avisos).not.toContain('Sem conexão com o site: usando guias em cache.');
+    const o = buildViewModel({ ...base, estado: est(), sync: { auto: true, guias: 3, ultima: 1, offline: true, motivo: 'offline' } });
+    expect(o.avisos).toContain('Sem conexão com o site: usando guias em cache.');
+  });
+});

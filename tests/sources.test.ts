@@ -158,3 +158,60 @@ describe('Store escalas: chaves perigosas', () => {
     expect(Object.getPrototypeOf(e)).toBe(Object.prototype);
   });
 });
+
+describe('200 sem dados reconhecidos não destrói o cache bom', () => {
+  it('com cache bom: devolve o cache com status erro e não regrava', async () => {
+    const dir = tmp();
+    await loadSource(URL1, { dominios: D, cacheDir: dir, fetchFn: ok(html) });
+    const f = path.join(dir, sha1File(URL1)), antes = fs.readFileSync(f, 'utf8');
+    const d = await loadSource(URL1, { dominios: D, cacheDir: dir, fetchFn: ok('<html><body>Just a moment...</body></html>') });
+    expect(d.source.status).toBe('erro');
+    expect(d.source.error).toBe('página sem dados reconhecidos');
+    expect(d.expRows.length).toBeGreaterThanOrEqual(99);
+    expect(fs.readFileSync(f, 'utf8')).toBe(antes);
+  });
+  it('com cache também vazio: segue vazio', async () => {
+    const dir = tmp();
+    await loadSource(URL1, { dominios: D, cacheDir: dir, fetchFn: ok('<main><p>oi</p></main>') });
+    const d = await loadSource(URL1, { dominios: D, cacheDir: dir, fetchFn: ok('<main><p>oi</p></main>') });
+    expect(d.source.status).toBe('vazio');
+  });
+});
+
+import { manterSeVazio } from '../src/sources/sync';
+describe('manterSeVazio', () => {
+  const um = [{ source: { url: 'a' } }] as never[];
+  it('lista nova vazia com antiga cheia: mantém a antiga', () => { expect(manterSeVazio([], um)).toBe(um); });
+  it('lista nova com dados (ou as duas vazias): usa a nova', () => {
+    const novo = [{ source: { url: 'b' } }] as never[];
+    expect(manterSeVazio(novo, um)).toBe(novo);
+    const vazio: never[] = [];
+    expect(manterSeVazio(vazio, [])).toBe(vazio);
+  });
+});
+
+describe('Store: padrões de sincronização não ficam presos no config', () => {
+  it('salvar com os padrões não grava sitemapUrl/fontesFixas/dominios; carregar volta aos padrões', () => {
+    const dir = tmp(), s = new Store(dir);
+    s.save(structuredClone(DEFAULT_CONFIG));
+    const j = JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8'));
+    expect(['sitemapUrl', 'fontesFixas', 'dominios'].filter((k) => k in j)).toEqual([]);
+    const c = s.load();
+    expect([c.sitemapUrl, c.fontesFixas, c.dominios]).toEqual([DEFAULT_CONFIG.sitemapUrl, DEFAULT_CONFIG.fontesFixas, DEFAULT_CONFIG.dominios]);
+  });
+  it('config antigo com os padrões gravados carrega os padrões atuais', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ sitemapUrl: DEFAULT_CONFIG.sitemapUrl, fontesFixas: DEFAULT_CONFIG.fontesFixas, dominios: DEFAULT_CONFIG.dominios }));
+    const c = new Store(dir).load();
+    expect(c.sitemapUrl).toBe(DEFAULT_CONFIG.sitemapUrl);
+    expect(c.fontesFixas).toEqual(DEFAULT_CONFIG.fontesFixas);
+  });
+  it('valor personalizado é mantido ao salvar e carregar', () => {
+    const dir = tmp(), s = new Store(dir);
+    s.save({ ...structuredClone(DEFAULT_CONFIG), sitemapUrl: 'https://niadb.com/sitemap.xml', dominios: ['niadb.com'] });
+    const c = s.load();
+    expect(c.sitemapUrl).toBe('https://niadb.com/sitemap.xml');
+    expect(c.dominios).toEqual(['niadb.com']);
+    expect(c.fontesFixas).toEqual(DEFAULT_CONFIG.fontesFixas);
+  });
+});

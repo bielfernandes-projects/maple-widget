@@ -119,3 +119,20 @@ describe('tracker', () => {
     expect(e.expPorHora).toBe(0);
   });
 });
+
+import { createTrackerComTabela } from '../src/tracker';
+describe('createTrackerComTabela (nova biblioteca não zera o tracker)', () => {
+  it('trocar a tabela preserva as amostras e o level up usa a tabela NOVA', () => {
+    const tr = createTrackerComTabela([{ level: 10, toNext: 1000 }]);
+    tr.push(R(0, 10, 100));
+    const a = tr.push(R(60_000, 10, 200))!;
+    expect(a.expPorHora).toBeCloseTo(6000); // 100 em 1 min
+    tr.setTabela([{ level: 10, toNext: 500 }]);
+    expect(tr.push(R(90_000, 10, 250))!.expPorHora).toBeCloseTo(150 / (90_000 / 3_600_000)); // janela continua desde t=0
+    tr.push(R(100_000, 11, 50));
+    const e = tr.push(R(120_000, 11, 50))!;
+    expect(e.upou).toBe(true);
+    // 150 até aqui + (500 - 250) + 50 = 450 em 2 min; com a tabela antiga seria 150 + 750 + 50
+    expect(e.expPorHora).toBeCloseTo(450 / (120_000 / 3_600_000));
+  });
+});

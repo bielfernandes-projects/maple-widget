@@ -1,6 +1,8 @@
 import { isAllowedUrl } from './allowlist';
 
 export type GuideRef = { url: string; lastmod: string };
+// sitemap baixado e válido, mas sem nenhum guia: o site mudou de estrutura (diferente de estar sem rede)
+export const SITEMAP_SEM_GUIAS = 'sitemap sem guias reconhecidos';
 export const USER_AGENT = 'maple-widget/0.1 (ferramenta pessoal; sincroniza guias do MapleStory Classic)';
 
 export function parseSitemap(xml: string): GuideRef[] {
@@ -23,6 +25,6 @@ export async function discoverGuides(o: { sitemapUrl: string; dominios: string[]
   const xml = await r.text();
   if (!xml.includes('<urlset')) throw new Error('sitemap inválido');
   const refs = parseSitemap(xml).filter((g) => isAllowedUrl(g.url, o.dominios));
-  if (!refs.length) throw new Error('sitemap inválido');
+  if (!refs.length) throw new Error(SITEMAP_SEM_GUIAS);
   return refs;
 }

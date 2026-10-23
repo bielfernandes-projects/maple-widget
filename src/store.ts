@@ -20,6 +20,14 @@ export const DEFAULT_CONFIG: Config = {
   sitemapUrl: 'https://meowdb.com/msclassic/sitemap.xml',
 };
 
+// Padrões da sincronização: só vão para o config.json se o usuário os mudou, para que uma troca futura de padrão
+// (ex.: outro sitemap) chegue a quem já tem config. Valor gravado igual a um padrão conhecido (atual ou antigo) vira o atual.
+const SYNC_KEYS = ['sitemapUrl', 'fontesFixas', 'dominios'] as const;
+const PADROES_CONHECIDOS: Record<(typeof SYNC_KEYS)[number], unknown[]> = {
+  sitemapUrl: [DEFAULT_CONFIG.sitemapUrl], fontesFixas: [DEFAULT_CONFIG.fontesFixas], dominios: [DEFAULT_CONFIG.dominios],
+};
+const igual = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 export class Store {
   private file: string;
   constructor(dir: string) { fs.mkdirSync(dir, { recursive: true }); this.file = path.join(dir, 'config.json'); }
@@ -27,6 +35,7 @@ export class Store {
     try {
       const saved = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       if (typeof saved !== 'object' || saved === null || Array.isArray(saved)) return structuredClone(DEFAULT_CONFIG);
+      for (const k of SYNC_KEYS) if (PADROES_CONHECIDOS[k].some((v) => igual(v, saved[k]))) delete saved[k];
       return {
         ...DEFAULT_CONFIG,
         ...saved,
@@ -43,7 +52,9 @@ export class Store {
   save(c: Config) {
     // escrita atômica: grava em .tmp e renomeia
     const tmp = this.file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(c, null, 2));
+    const out: Record<string, unknown> = { ...c };
+    for (const k of SYNC_KEYS) if (igual(c[k], DEFAULT_CONFIG[k])) delete out[k];
+    fs.writeFileSync(tmp, JSON.stringify(out, null, 2));
     fs.renameSync(tmp, this.file);
   }
 }

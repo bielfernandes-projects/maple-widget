@@ -57,7 +57,7 @@ export type Config = {
   fontesFixas: string[];
 };
 
-export type SyncInfo = { auto: boolean; guias: number; ultima: number; offline: boolean };
+export type SyncInfo = { auto: boolean; guias: number; ultima: number; offline: boolean; motivo?: 'offline' | 'sitemap' };
 
 export type ViewModel = {
   estado: Estado | null;

@@ -12,7 +12,9 @@ export function buildViewModel(i: VMInput): ViewModel {
   const mapas = e ? mapasParaLevel(lib.maps, e.level) : [];
   const avisos: string[] = [];
   if (!i.fontes.length) avisos.push('Nenhuma fonte carregada. Verifique a conexão ou ligue a sincronização na aba Fontes.');
-  if (i.sync.offline) avisos.push('Sem conexão com o site: usando guias em cache.');
+  if (i.sync.offline) avisos.push(i.sync.motivo === 'sitemap'
+    ? 'O sitemap do site mudou (sem guias reconhecidos); usando guias em cache.'
+    : 'Sem conexão com o site: usando guias em cache.');
   if (i.capturaPreta) avisos.push('Captura preta: o jogo parece estar em tela cheia exclusiva. Use o modo janela/borderless ou mova o widget para o 2º monitor.');
   if (i.jogoNaoEncontrado) avisos.push('Janela do jogo não encontrada.');
   if (e?.semLeitura) avisos.push('Sem leitura da HUD agora (mantendo último valor).');

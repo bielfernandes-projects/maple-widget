@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { discoverGuides, type GuideRef } from './discover';
+import { discoverGuides, SITEMAP_SEM_GUIAS, type GuideRef } from './discover';
 import { loadSource, readCache } from './load';
 import { PARSER_VERSION } from './parser';
 import type { SourceData } from '../types';
@@ -9,23 +9,27 @@ const MANUAL_TTL_MS = 6 * 3_600_000;
 const CONCURRENCIA = 3;
 
 export type SyncOpts = { sitemapUrl: string; dominios: string[]; cacheDir: string; manual: string[]; fixas?: string[]; fetchFn?: typeof fetch };
-export type SyncResult = { data: SourceData[]; descobertos: number; atualizados: number; offline: boolean };
+export type SyncResult = { data: SourceData[]; descobertos: number; atualizados: number; offline: boolean; motivo?: 'offline' | 'sitemap' };
 
 // Roda a cada 30 min no main: nunca pode rejeitar.
 export async function syncAuto(o: SyncOpts): Promise<SyncResult> {
-  try { return await run(o); } catch { return { data: [], descobertos: 0, atualizados: 0, offline: true }; }
+  try { return await run(o); } catch { return { data: [], descobertos: 0, atualizados: 0, offline: true, motivo: 'offline' }; }
 }
+// carga nova vazia (rede de segurança do syncAuto, tudo falhou) não apaga a biblioteca que já estava em memória
+export const manterSeVazio = <T>(novo: T[], antigo: T[]): T[] => (!novo.length && antigo.length ? antigo : novo);
 
 async function run(o: SyncOpts): Promise<SyncResult> {
   try { fs.mkdirSync(o.cacheDir, { recursive: true }); } catch { /* ignora */ }
   const indexFile = path.join(o.cacheDir, 'auto-index.json');
   let refs: GuideRef[];
   let offline = false;
+  let motivo: SyncResult['motivo'];
   try {
     refs = await discoverGuides(o);
     try { fs.writeFileSync(indexFile, JSON.stringify(refs)); } catch { /* índice é best-effort */ }
-  } catch {
+  } catch (e) {
     offline = true;
+    motivo = e instanceof Error && e.message === SITEMAP_SEM_GUIAS ? 'sitemap' : 'offline';
     try {
       const j = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
       refs = Array.isArray(j)
@@ -68,5 +72,5 @@ async function run(o: SyncOpts): Promise<SyncResult> {
   };
   await Promise.all(Array.from({ length: CONCURRENCIA }, worker));
   data.sort((a, b) => a.source.url.localeCompare(b.source.url));
-  return { data, descobertos: refs.length, atualizados, offline };
+  return { data, descobertos: refs.length, atualizados, offline, motivo };
 }

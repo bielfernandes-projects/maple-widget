@@ -47,6 +47,12 @@ export async function loadSource(url: string, o: Opts): Promise<SourceData> {
     const g = parseGuide(await r.text(), url);
     const c = counts(g);
     const empty = !(c.maps || c.quests || c.expRows || c.tips);
+    // 200 sem nada reconhecível (layout novo, página de desafio, corpo truncado): não troca um cache bom por vazio
+    if (empty) {
+      const cached = readCache(dir, url);
+      const k = cached?.source.counts;
+      if (cached && k && (k.maps || k.quests || k.expRows || k.tips)) return { ...cached, source: { ...cached.source, status: 'erro', error: 'página sem dados reconhecidos' } };
+    }
     const data: SourceData = { ...g, source: { url, title: g.title || url, fetchedAt: Date.now(), status: empty ? 'vazio' : 'ok', counts: c, lastmod: o.lastmod, auto: o.auto, parserVersion: PARSER_VERSION } };
     writeCache(dir, file, data);
     return data;

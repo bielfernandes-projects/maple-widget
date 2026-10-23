@@ -143,3 +143,12 @@ describe('regioesDoQuadro / quadroValeParaRegioes', () => {
     expect(quadroValeParaRegioes(JSON.stringify(nova), { '800x600': nova }, 800, 600)).toBe(true);
   });
 });
+
+import { avisoSemCalibracao } from '../src/capture/hud';
+describe('avisoSemCalibracao', () => {
+  it('avisa quando não há regiões salvas para a chave e some depois de calibrar', () => {
+    expect(avisoSemCalibracao({}, 1366, 768)).toBe('Sem calibração para 1366x768 — usando posições padrão. Fontes → Recalibrar HUD.');
+    expect(avisoSemCalibracao({ '1366x768': DEFAULT_REGIONS }, 1366, 768)).toBeNull();
+    expect(avisoSemCalibracao({ '1920x1080': DEFAULT_REGIONS }, 1366, 768)).not.toBeNull();
+  });
+});

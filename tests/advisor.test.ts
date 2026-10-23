@@ -115,3 +115,45 @@ describe('questsParaLevel: variantes', () => {
     expect(r.map((q) => q.id)).toEqual(['b', 'a']);
   });
 });
+
+describe('linhagem de classe com títulos reais dos guias', () => {
+  const G = (c: string) => `MapleStory Classic ${c} Build and Leveling Guide`;
+  const guias = {
+    warrior: G('Warrior'), bowman: G('Bowman'), magician: G('Magician'), thief: G('Thief'), fighter: G('Fighter'),
+    spearman: G('Spearman'), page: G('Page'), il: G('I/L Wizard'), fp: G('F/P Wizard'), cleric: G('Cleric'),
+    hunter: G('Hunter'), xbow: G('Crossbowman'), assassin: G('Assassin'), bandit: G('Bandit'),
+  };
+  const genericos = ["Beginner's Guide: MapleStory Classic World", 'MapleStory Classic World Glossary'];
+  const tips = [...Object.values(guias), ...genericos].map((g) => T(g, 'Ability Points'));
+  const passa = (classe: string) => dicasPara(tips, 30, classe).map((t) => t.guide);
+  const casos: [string[], string[]][] = [
+    [['Wizard'], [guias.magician, guias.fp, guias.il]],
+    [['FP Wizard', 'F/P Wizard', 'F P Wizard'], [guias.fp, guias.magician]],
+    [['I/L Wizard', 'IL Wizard'], [guias.il, guias.magician]],
+    [['Cleric'], [guias.cleric, guias.magician]],
+    [['Magician', 'Mage'], [guias.magician]],
+    [['Archer', 'Bowman'], [guias.bowman]],
+    [['Hunter'], [guias.hunter, guias.bowman]],
+    [['Crossbowman', 'Crossbow man'], [guias.xbow, guias.bowman]],
+    [['Warrior'], [guias.warrior]],
+    [['Fighter'], [guias.fighter, guias.warrior]],
+    [['Spearman'], [guias.spearman, guias.warrior]],
+    [['Page'], [guias.page, guias.warrior]],
+    [['Thief', 'Rogue'], [guias.thief]],
+    [['Assassin'], [guias.assassin, guias.thief]],
+    [['Bandit'], [guias.bandit, guias.thief]],
+  ];
+  for (const [classes, esperados] of casos) for (const c of classes) {
+    it(`${c}: guias da linhagem + genéricos, sem outras famílias`, () => {
+      expect(new Set(passa(c))).toEqual(new Set([...esperados, ...genericos]));
+    });
+  }
+  it('Hunter não recebe dicas de Crossbowman e F/P não recebe de I/L', () => {
+    expect(passa('Hunter')).not.toContain(guias.xbow);
+    expect(passa('FP Wizard')).not.toContain(guias.il);
+  });
+  it('classe desconhecida: só genéricos; nunca lança', () => {
+    expect(new Set(passa('Beginner'))).toEqual(new Set(genericos));
+    for (const c of ['(', 'constructor', '__proto__', 'hasOwnProperty', 'a\\b']) expect(Array.isArray(passa(c))).toBe(true);
+  });
+});

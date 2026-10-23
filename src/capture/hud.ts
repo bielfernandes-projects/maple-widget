@@ -27,6 +27,10 @@ export const regioesDoQuadro = (calib: Record<string, Regions>, w: number, h: nu
 // um quadro esparso montado com as regiões `montadoCom` (JSON) só serve se a calibração atual da chave for a mesma
 export const quadroValeParaRegioes = (montadoCom: string, calib: Record<string, Regions>, w: number, h: number) => montadoCom === JSON.stringify(regioesDoQuadro(calib, w, h));
 
+// quadro ao vivo sem calibração salva para a sua chave: avisa (as posições padrão podem não bater com a HUD)
+export const avisoSemCalibracao = (calib: Record<string, Regions>, w: number, h: number): string | null =>
+  Object.hasOwn(calib, `${w}x${h}`) ? null : `Sem calibração para ${w}x${h} — usando posições padrão. Fontes → Recalibrar HUD.`;
+
 export function parseLevel(t: string): number | undefined {
   const d = t.replace(/\D/g, '');
   const v = d ? parseInt(d, 10) : NaN;

@@ -1,4 +1,5 @@
-import type { Estado, Reading } from './types';
+import { makeExpToNext } from './advisor';
+import type { Estado, ExpRow, Reading } from './types';
 
 const JANELA_MS = 10 * 60_000;
 const SPAN_MIN_MS = 30_000;
@@ -77,4 +78,11 @@ export function createTracker(expToNext: (level: number) => number | undefined) 
       return emite(r, conf, false);
     },
   };
+}
+
+// Um tracker para a vida toda do processo: trocar a biblioteca (sync) só troca a tabela de EXP, sem zerar amostras/total.
+export function createTrackerComTabela(rows: ExpRow[] = []) {
+  let expToNext = makeExpToNext(rows);
+  const t = createTracker((lv) => expToNext(lv));
+  return { push: t.push, setTabela(r: ExpRow[]) { expToNext = makeExpToNext(r); } };
 }

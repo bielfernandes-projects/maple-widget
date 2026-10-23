@@ -274,3 +274,19 @@ describe('PARSER_VERSION no cache', () => {
     expect(n.calls.length).toBe(4);
   });
 });
+
+import { discoverGuides } from '../src/sources/discover';
+describe('sitemap sem guias reconhecidos', () => {
+  const xml = '<?xml version="1.0"?><urlset><url><loc>https://meowdb.com/msclassic/outra/coisa</loc></url></urlset>';
+  const f = (async () => new Response(xml, { status: 200 })) as unknown as typeof fetch;
+  it('discoverGuides lança erro próprio', async () => {
+    await expect(discoverGuides({ sitemapUrl: SITEMAP, dominios: D, fetchFn: f })).rejects.toThrow('sitemap sem guias reconhecidos');
+  });
+  it('syncAuto distingue mudança do sitemap de falta de rede', async () => {
+    const a = await syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), 'mw-')), manual: [], fetchFn: f });
+    expect([a.offline, a.motivo]).toEqual([true, 'sitemap']);
+    const off = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+    const b = await syncAuto({ sitemapUrl: SITEMAP, dominios: D, cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), 'mw-')), manual: [], fetchFn: off });
+    expect([b.offline, b.motivo]).toEqual([true, 'offline']);
+  });
+});
