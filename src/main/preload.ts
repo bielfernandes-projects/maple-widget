@@ -20,5 +20,6 @@ const api: Api = {
   saveCalibration: (k, r, p, j) => ipcRenderer.invoke('wiz:save', k, r, p, j),
   getConfig: () => ipcRenderer.invoke('cfg:get'),
   autoEscala: () => ipcRenderer.invoke('capture:autoescala'),
+  quit: () => ipcRenderer.invoke('app:quit'),
 };
 contextBridge.exposeInMainWorld('api', api);

@@ -2,6 +2,8 @@
   "name": "maple-widget",
   "version": "0.1.0",
   "private": true,
+  "description": "Overlay para Windows que lê a HUD do MapleStory Classic e sugere mapas, quests e dicas dos guias do meowdb.",
+  "author": "Gabriel Fernandes",
   "main": "dist/main.js",
   "scripts": {
     "build": "node build.mjs",
@@ -15,6 +17,7 @@
     "productName": "Maple Widget",
     "files": [
       "dist/**",
+      "!dist/**/*.map",
       "package.json"
     ],
     "asarUnpack": [
@@ -28,7 +31,16 @@
     },
     "directories": {
       "output": "release"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "resources/tessdata",
+        "to": "tessdata",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "dependencies": {
     "cheerio": "^1.2.0",

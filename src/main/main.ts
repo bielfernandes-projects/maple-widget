@@ -1,22 +1,21 @@
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, screen, session, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { HudReader, DEFAULT_REGIONS, quadroValeParaRegioes, regioesDoQuadro } from '../capture/hud';
+import { HudReader, DEFAULT_REGIONS, avisoSemCalibracao, quadroValeParaRegioes, regioesDoQuadro } from '../capture/hud';
 import { LeitorComCache } from '../capture/cached-reader';
 import { bgraToImg, decodeJpeg, isBlack, montarImg, toPngBuffer } from '../capture/image';
 import { escalasCandidatas, resizeImg } from '../capture/scale';
 import { escolherJanela } from '../capture/window';
-import { createTracker } from '../tracker';
-import { makeExpToNext } from '../advisor';
-import { isAllowedUrl } from '../sources/allowlist';
+import { createTrackerComTabela } from '../tracker';
 import { loadSource } from '../sources/load';
-import { syncAuto } from '../sources/sync';
+import { manterSeVazio, syncAuto } from '../sources/sync';
 import { migrarCacheGuias } from '../sources/migrar';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validRecortes, validRegions, validResKey } from './validate';
-import type { Estado, Img, Library, SourceData } from '../types';
+import { posicaoVisivel, validAddUrl, validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validQuestId, validRecortes, validRegions, validResKey } from './validate';
+import { espelharConsole, prepararLog } from './log';
+import type { Estado, Img, Library, SourceData, SyncInfo } from '../types';
 
 const MAX_JPG = 20 * 1024 * 1024;
 const OVERLAY = 'MW Overlay';
@@ -30,12 +29,12 @@ let cfg: ReturnType<Store['load']>;
 let reader: HudReader | undefined;
 let leitor: LeitorComCache | undefined; // tick: OCR pesado só quando o recorte muda
 let ocrErro = '';
-const OCR_MSG = 'Leitura da tela indisponível (falha ao preparar o OCR — verifique a conexão). Tentando de novo…';
+const OCR_MSG = 'Leitura da tela indisponível (falha ao preparar o OCR). Tentando de novo a cada 30 s…';
 let data: SourceData[] = [];
-let tracker = createTracker(() => undefined);
+const tracker = createTrackerComTabela();
 let estado: Estado | null = null;
 let flags = { capturaPreta: false, jogoNaoEncontrado: false };
-let syncInfo = { ultima: 0, offline: false };
+let syncInfo: Omit<SyncInfo, 'auto' | 'guias'> = { ultima: 0, offline: false };
 let busy = false;
 const SYNC_INTERVALO_MS = 30 * 60_000;
 const QUADRO_VELHO_MS = 5000, REINICIO_MS = 3000;
@@ -69,19 +68,18 @@ const lib = (): Library => ({
 const cacheDir = () => path.join(app.getPath('userData'), 'guias');
 const resKey = (i: Img) => `${i.w}x${i.h}`;
 
-function rebuildTracker() {
-  tracker = createTracker(makeExpToNext(lib().expRows));
-}
 async function doLoad() {
   if (cfg.autoSync) {
     const r = await syncAuto({ sitemapUrl: cfg.sitemapUrl, dominios: cfg.dominios, cacheDir: cacheDir(), manual: cfg.sources, fixas: cfg.fontesFixas });
-    data = r.data;
-    syncInfo = { ultima: Date.now(), offline: r.offline };
+    if (!r.data.length && data.length) console.warn('[sync] carga vazia; mantendo os guias já carregados');
+    data = manterSeVazio(r.data, data);
+    syncInfo = { ultima: Date.now(), offline: r.offline, motivo: r.motivo };
   } else {
+    // sincronização desligada: só os links extras (lista vazia aqui é legítima)
     data = await Promise.all(cfg.sources.map((u) => loadSource(u, { dominios: cfg.dominios, cacheDir: cacheDir() })));
     syncInfo = { ultima: Date.now(), offline: false };
   }
-  rebuildTracker();
+  tracker.setTabela(lib().expRows); // nunca recria o tracker: EXP/h e veredito não zeram a cada sync
 }
 // cargas em fila (nunca duas ao mesmo tempo); `loading` é a última da fila
 let loading: Promise<void> | null = null;
@@ -92,11 +90,13 @@ function loadAll(): Promise<void> {
   p.then(clear, clear);
   return p;
 }
+// só com quadro nativo ao vivo (a miniatura do fallback é sempre reescalada para 1920 e não tem chave própria)
+const semCalibracao = () => { const q = nativaFalhou ? null : quadroNativo(); return q ? avisoSemCalibracao(cfg.regions, q.img.w, q.img.h) : null; };
 function emit() {
   if (!win || win.isDestroyed()) return;
   const vm = buildViewModel({
     estado, lib: lib(), fontes: data.map((d) => d.source), feitas: new Set(cfg.questsFeitas), lim: cfg.limiares,
-    avisosExtras: [ocrErro, nativaFalhou ? NATIVA_MSG : ''].filter(Boolean),
+    avisosExtras: [ocrErro, nativaFalhou ? NATIVA_MSG : '', semCalibracao()].filter((s): s is string => !!s),
     ...flags, precisaWizard: !cfg.gamePath && !cfg.assistentePulado, opacidade: cfg.opacidade, expandido: cfg.janela.expandido,
     sync: { auto: cfg.autoSync, guias: data.filter((d) => d.source.auto).length, ...syncInfo },
   });
@@ -281,8 +281,11 @@ async function tick() {
 }
 
 function createWindow() {
+  // posição salva num monitor que não existe mais vai para o canto superior direito do principal
+  const tela = (d: Electron.Display) => d.workArea;
+  const pos = posicaoVisivel({ x: cfg.janela.x, y: cfg.janela.y }, W_COMPACTO, screen.getAllDisplays().map(tela), tela(screen.getPrimaryDisplay()));
   win = new BrowserWindow({
-    title: OVERLAY, width: W_COMPACTO.w, height: W_COMPACTO.h, x: cfg.janela.x, y: cfg.janela.y,
+    title: OVERLAY, width: W_COMPACTO.w, height: W_COMPACTO.h, x: pos.x, y: pos.y,
     frame: false, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), additionalArguments: ['--mw-overlay'], contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
   });
@@ -319,7 +322,7 @@ function handle<R>(ch: string, fallback: R, fn: (...a: unknown[]) => R | Promise
 function registerIpc() {
   handle('cfg:get', null as unknown, () => cfg);
   handle<{ ok: boolean; erro?: string }>('src:add', { ok: false, erro: 'Erro ao adicionar a fonte.' }, async (url) => {
-    if (typeof url !== 'string' || !isAllowedUrl(url, cfg.dominios)) return { ok: false, erro: 'Domínio não permitido (use links do meowdb/niadb).' };
+    if (!validAddUrl(url, cfg.dominios)) return { ok: false, erro: 'Link não permitido (use links https do meowdb/niadb, até 500 caracteres).' };
     if (cfg.sources.includes(url)) return { ok: false, erro: 'Fonte já adicionada.' };
     cfg.sources.push(url); store.save(cfg);
     await loadAll(); emit();
@@ -338,11 +341,12 @@ function registerIpc() {
   handle<void>('sync:now', undefined, async () => { await loadAll(); emit(); });
   handle<void>('sync:toggle', undefined, async (on) => { cfg.autoSync = !!on; store.save(cfg); await loadAll(); emit(); });
   handle<void>('quest:toggle', undefined, (id) => {
-    if (typeof id !== 'string') return;
+    if (!validQuestId(id)) return;
     const s = new Set(cfg.questsFeitas);
     s.has(id) ? s.delete(id) : s.add(id);
     cfg.questsFeitas = [...s]; store.save(cfg); emit();
   });
+  handle<void>('app:quit', undefined, () => sair()); // sem argumentos
   handle<void>('win:expand', undefined, (b) => { applySize(!!b); store.save(cfg); });
   handle<void>('win:opacity', undefined, (n) => {
     if (typeof n !== 'number' || !Number.isFinite(n)) return;
@@ -424,18 +428,31 @@ function registerIpc() {
 process.on('unhandledRejection', (e) => console.error('unhandledRejection', e));
 process.on('uncaughtException', (e) => console.error('uncaughtException', e));
 
+// modelo de OCR (eng.traineddata) que vai junto com o app: resources\tessdata no pacote, resources/tessdata no repositório
+function tessdataEmbutido(): string | undefined {
+  const dir = app.isPackaged ? path.join(process.resourcesPath, 'tessdata') : path.join(app.getAppPath(), 'resources', 'tessdata');
+  return fs.existsSync(path.join(dir, 'eng.traineddata')) ? dir : undefined;
+}
+
 let retryTimer: NodeJS.Timeout | undefined;
+let iniciando = false; // um createWorker por vez: um retry de 30 s nunca sobrepõe uma inicialização lenta
 async function initReader() {
+  if (iniciando || reader) return;
+  iniciando = true;
   try {
-    // MW_FORCE_OCR_FAIL=1: só para o smoke test da falha de OCR
-    if (process.env.MW_FORCE_OCR_FAIL) throw new Error('MW_FORCE_OCR_FAIL');
-    // o tesseract.js só grava o cache do idioma se a pasta já existir (senão baixa de novo a cada início)
+    // MW_FORCE_OCR_FAIL=1: só para o smoke test da falha de OCR (fora do pacote)
+    if (process.env.MW_FORCE_OCR_FAIL && !app.isPackaged) throw new Error('MW_FORCE_OCR_FAIL');
+    // o tesseract.js só grava o cache do idioma se a pasta já existir
     const td = path.join(app.getPath('userData'), 'tessdata');
     fs.mkdirSync(td, { recursive: true });
-    reader = await HudReader.create(td);
+    const emb = tessdataEmbutido();
+    if (!emb) console.warn('[ocr] modelo embutido não encontrado; baixando da CDN do tesseract.js');
+    const r = await HudReader.create(td, undefined, emb);
+    if (reader) { void r.close(); return; } // outra inicialização já venceu: descarta o worker extra
+    reader = r;
     leitor = new LeitorComCache(reader);
     ocrErro = '';
-    console.log('[ocr] pronto');
+    console.log('[ocr] pronto' + (emb ? ' (modelo embutido)' : ''));
     clearInterval(retryTimer); retryTimer = undefined;
     emit();
   } catch (e) {
@@ -444,38 +461,56 @@ async function initReader() {
     ocrErro = OCR_MSG;
     emit();
     retryTimer ??= setInterval(() => { void initReader(); }, 30_000);
-  }
+  } finally { iniciando = false; }
 }
 
-app.whenReady().then(async () => {
-  console.log('[app] ' + (app.isPackaged ? 'empacotado' : 'dev') + ' v' + app.getVersion());
-  store = new Store(app.getPath('userData'));
-  cfg = store.load();
-  const migrados = migrarCacheGuias(path.join(app.getPath('userData'), 'cache'), cacheDir());
-  if (migrados) console.log('[app] ' + migrados + ' arquivo(s) de guias copiados de cache para guias');
-  alvo = cfg.janelaJogo;
-  registerIpc();
-  createWindow();
-  // a capturadora oculta não segura o app: fechar o overlay encerra
-  win.on('closed', () => app.quit());
-  // MW_SELFTEST=1 (só fora do pacote): verificação sem o jogo — captura uma janela de teste, loga e sai
-  if (SELFTEST) {
-    alvo = 'MW-SELFTEST';
-    void new BrowserWindow({ width: 800, height: 600, title: alvo }).loadURL(`data:text/html,<title>${alvo}</title><body style="margin:0;height:100vh;background:linear-gradient(90deg,%23c33,%2336c)">`);
-  }
-  registrarCaptura();
-  criarCapturadora();
-  void loadAll().then(emit).catch((e) => console.error('loadAll', e));
-  const reg = (k: string, f: () => void) => { if (!globalShortcut.register(k, f)) console.warn('atalho não registrado:', k); };
-  reg('Ctrl+Alt+M', () => (win.isVisible() ? win.hide() : win.show()));
-  let through = false;
-  reg('Ctrl+Alt+C', () => { through = !through; win.setIgnoreMouseEvents(through, { forward: true }); });
-  setInterval(tick, TICK_MS);
-  // não empilha sincronização: pula se já há carga em andamento
-  setInterval(() => { if (cfg.autoSync && !loading) loadAll().then(emit).catch((e) => console.error('sync', e)); }, SYNC_INTERVALO_MS);
-  await initReader();
-  void tick();
-}).catch((e) => { console.error('startup', e); app.quit(); });
-app.on('before-quit', () => { saindo = true; });
-app.on('will-quit', () => { globalShortcut.unregisterAll(); flushSave(); void reader?.close(); });
-app.on('window-all-closed', () => app.quit());
+function sair() { flushSave(); app.quit(); }
+
+// uma instância por pasta de dados: o segundo clique no .exe só traz o widget de volta
+const unica = app.requestSingleInstanceLock();
+const LOG = path.join(app.getPath('userData'), 'log.txt');
+if (unica) prepararLog(LOG);
+espelharConsole(LOG);
+if (!unica) {
+  console.log('[app] outra instância já está aberta; saindo');
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show(); win.focus();
+  });
+  app.whenReady().then(async () => {
+    console.log('[app] ' + (app.isPackaged ? 'empacotado' : 'dev') + ' v' + app.getVersion());
+    store = new Store(app.getPath('userData'));
+    cfg = store.load();
+    const migrados = migrarCacheGuias(path.join(app.getPath('userData'), 'cache'), cacheDir());
+    if (migrados) console.log('[app] ' + migrados + ' arquivo(s) de guias copiados de cache para guias');
+    alvo = cfg.janelaJogo;
+    registerIpc();
+    createWindow();
+    // a capturadora oculta não segura o app: fechar o overlay encerra
+    win.on('closed', () => app.quit());
+    // MW_SELFTEST=1 (só fora do pacote): verificação sem o jogo — captura uma janela de teste, loga e sai
+    if (SELFTEST) {
+      alvo = 'MW-SELFTEST';
+      void new BrowserWindow({ width: 800, height: 600, title: alvo }).loadURL(`data:text/html,<title>${alvo}</title><body style="margin:0;height:100vh;background:linear-gradient(90deg,%23c33,%2336c)">`);
+    }
+    registrarCaptura();
+    criarCapturadora();
+    void loadAll().then(emit).catch((e) => console.error('loadAll', e));
+    const reg = (k: string, f: () => void) => { if (!globalShortcut.register(k, f)) console.warn('atalho não registrado:', k); };
+    reg('Ctrl+Alt+M', () => (win.isVisible() ? win.hide() : win.show()));
+    let through = false;
+    reg('Ctrl+Alt+C', () => { through = !through; win.setIgnoreMouseEvents(through, { forward: true }); });
+    reg('Ctrl+Alt+Q', sair);
+    setInterval(tick, TICK_MS);
+    // não empilha sincronização: pula se já há carga em andamento
+    setInterval(() => { if (cfg.autoSync && !loading) loadAll().then(emit).catch((e) => console.error('sync', e)); }, SYNC_INTERVALO_MS);
+    await initReader();
+    void tick();
+  }).catch((e) => { console.error('startup', e); app.quit(); });
+  app.on('before-quit', () => { saindo = true; });
+  app.on('will-quit', () => { globalShortcut.unregisterAll(); flushSave(); void reader?.close(); });
+  app.on('window-all-closed', () => app.quit());
+}

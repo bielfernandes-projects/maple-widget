@@ -234,8 +234,9 @@ export type Campo = keyof Regions;
 const TODOS: ReadonlySet<Campo> = new Set(['level', 'exp', 'cls', 'map']);
 export class HudReader {
   private constructor(private w: Worker, private templates: Templates) {}
-  static async create(cachePath?: string, templates: Templates = digitTemplates) {
-    const w = await createWorker('eng', 1, cachePath ? { cachePath } : {});
+  // langPath: pasta local com eng.traineddata (sem gzip) — sem rede; ausente = baixa da CDN do tesseract.js
+  static async create(cachePath?: string, templates: Templates = digitTemplates, langPath?: string) {
+    const w = await createWorker('eng', 1, { ...(cachePath ? { cachePath } : {}), ...(langPath ? { langPath, gzip: false } : {}) });
     return new HudReader(w, templates);
   }
   private async run(img: Img, wl: string, psm: PSM) {

@@ -41,9 +41,15 @@ function runWizard() {
   catch (e) { console.error('wizard', e); wizardActive = false; wizardDone = true; lastKey = ''; }
 }
 
+// o mesmo level up (de/para) chega em vários vm seguidos: só arma o cartão uma vez por 60 s, e nunca de novo se foi dispensado
+let ultimoLevelUp: { de: number; para: number; quando: number; dispensado: boolean } | null = null;
+const LEVELUP_DEDUPE_MS = 60_000;
 window.api.onVM((v) => {
   vm = v;
-  if (v.levelUp) {
+  const u = ultimoLevelUp, repetido = !!v.levelUp && !!u && u.de === v.levelUp.de && u.para === v.levelUp.para
+    && (u.dispensado || Date.now() - u.quando < LEVELUP_DEDUPE_MS);
+  if (v.levelUp && !repetido) {
+    ultimoLevelUp = { de: v.levelUp.de, para: v.levelUp.para, quando: Date.now(), dispensado: false };
     cardData = v.levelUp; cardUntil = Date.now() + 15000;
     clearTimeout(cardTimer); cardTimer = window.setTimeout(() => { lastKey = ''; render(); }, 15000 + 50);
     if (!v.expandido) { v.expandido = true; void window.api.setExpanded(true); }
@@ -69,6 +75,7 @@ function render() {
     h('span', { class: `dot ${vm.veredito.cor}`, title: vm.veredito.pct === null ? 'sem dados' : `${Math.round(vm.veredito.pct * 100)}% do ideal. ${TETO}` }),
     h('button', { class: 'nodrag', 'aria-label': vm.expandido ? 'Recolher' : 'Expandir', title: vm.expandido ? 'Recolher' : 'Expandir',
       onclick: () => { vm!.expandido = !vm!.expandido; void window.api.setExpanded(vm!.expandido); render(); } }, vm.expandido ? '▴' : '▾'),
+    h('button', { class: 'nodrag sair', 'aria-label': 'Sair', title: 'Sair do Maple Widget', onclick: () => void window.api.quit() }, '✕'),
   );
   const kids: Node[] = [head];
   if (vm.expandido) {
@@ -93,7 +100,7 @@ function levelCard(u: NonNullable<ViewModel['levelUp']>) {
   const sp = u.dicas.find((d) => d.kind === 'sp'), ap = u.dicas.find((d) => d.kind === 'ap');
   const nomes = (xs: { name: string }[]) => xs.slice(0, 3).map((x) => x.name).join(', ');
   const { maps, quests } = u.novidades;
-  return h('div', { class: 'card nodrag', onclick: () => { cardUntil = 0; cardData = null; lastKey = ''; render(); } },
+  return h('div', { class: 'card nodrag', onclick: () => { cardUntil = 0; cardData = null; if (ultimoLevelUp) ultimoLevelUp.dispensado = true; lastKey = ''; render(); } },
     h('h4', null, `Level up! Lv ${u.de} → ${u.para}`),
     sp ? tipBlock(sp, 'SP') : null,
     ap ? tipBlock(ap, 'AP') : null,
@@ -173,5 +180,5 @@ function footer(v: ViewModel) {
   r.addEventListener('input', () => void window.api.setOpacity(Number(r.value)));
   r.addEventListener('change', () => { dragging = false; r.blur(); });
   return h('div', { class: 'foot nodrag' }, h('label', { class: 'opac' }, 'Opacidade ', r),
-    h('span', { class: 'keys' }, 'Ctrl+Alt+M oculta · Ctrl+Alt+C click-through'));
+    h('span', { class: 'keys' }, 'Ctrl+Alt+M oculta · Ctrl+Alt+C click-through · Ctrl+Alt+Q sai'));
 }

@@ -5,8 +5,10 @@ body { margin: 0; font: 13px/1.35 "Segoe UI", sans-serif; color: var(--fg); back
 #app { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 .drag { -webkit-app-region: drag; } .nodrag { -webkit-app-region: no-drag; }
 .head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
-.head .lv { font-weight: 700; color: var(--acc); white-space: nowrap; }
-.bar { flex: 1; height: 8px; background: #0e1017; border-radius: 4px; overflow: hidden; min-width: 60px; }
+.head { gap: 6px; } .head > button { flex: none; padding: 2px 6px; }
+.head .lv { font-weight: 700; color: var(--acc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.head .sair:hover { background: #5a2430; }
+.bar { flex: 1; height: 8px; background: #0e1017; border-radius: 4px; overflow: hidden; min-width: 40px; }
 .bar > i { display: block; height: 100%; background: var(--acc); }
 .rate { color: var(--mut); white-space: nowrap; }
 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--cinza); flex: none; }

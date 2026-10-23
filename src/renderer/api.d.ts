@@ -18,5 +18,6 @@ export interface Api {
   skipWizard(): Promise<void>;
   getConfig(): Promise<Config>;
   autoEscala(): Promise<{ ok: boolean; escala?: number; pontos?: number; erro?: string }>;
+  quit(): Promise<void>;
 }
 declare global { interface Window { api: Api } }
