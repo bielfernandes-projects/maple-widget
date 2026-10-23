@@ -47,3 +47,14 @@ input[type=range] { accent-color: var(--acc); }
 .res { cursor: pointer; } .res:hover { background: #fff0c4; }
 .det { padding: 2px 0 6px 40px; border-bottom: 1px dashed var(--line); } .det .m { padding: 1px 0; }
 .faixa { padding: 0 0 4px 40px; font-size: 12px; } .sec { display: block; margin-top: 10px; }
+.det { padding: 2px 0 8px; }
+.sec-t { margin: 8px 0 2px; font-weight: 700; font-size: 12px; color: var(--acc); text-transform: uppercase; letter-spacing: .03em; }
+.nota { font-size: 11px; color: var(--mut); margin-bottom: 2px; }
+.tab { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.tr { display: flex; align-items: center; gap: 6px; padding: 2px 6px; font-size: 12px; }
+.tr:nth-child(even) { background: #fff3cf; }
+.tr img { width: 20px; height: 20px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.tr .tn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr .ti { flex: none; color: var(--mut); text-align: right; white-space: nowrap; }
+button.mais { display: block; margin: 4px 0; font-size: 12px; }
+.ajustes { padding: 4px 0 8px; border-bottom: 1px dashed var(--line); margin-bottom: 4px; } .ajustes .opac { display: flex; align-items: center; gap: 8px; } .ajustes .opac input { flex: 1; } .ajustes .keys { font-size: 11px; margin-top: 4px; }

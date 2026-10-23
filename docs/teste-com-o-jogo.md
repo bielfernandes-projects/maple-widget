@@ -12,7 +12,7 @@ Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela fo
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 1b. Assistente, passos 3 e 4: calibrar o HUD e guias
-- **Fazer:** no passo 3, com o jogo aberto, arrastar retângulos na ordem LEVEL, CLASSE/nick, EXP, MAPA; testar "Desfazer último retângulo" e "Detectar escala". No passo 4, clicar "Sincronizar agora" e "Concluir". Em outra execução limpa, testar "Pular configuração": o assistente não deve reabrir no próximo início (para refazer: Fontes → Recalibrar HUD).
+- **Fazer:** no passo 3, com o jogo aberto, arrastar retângulos na ordem LEVEL, CLASSE/nick, EXP, MAPA; testar "Desfazer último retângulo" e "Detectar escala". No passo 4, clicar "Sincronizar agora" e "Concluir". Em outra execução limpa, testar "Pular configuração": o assistente não deve reabrir no próximo início (para refazer: Config. → Recalibrar HUD).
 - **Esperado:** a imagem é uma captura ao vivo; "Detectar escala" informa a escala (ou um erro claro); depois de concluir, a leitura mostra valores corretos.
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
@@ -46,7 +46,7 @@ Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela fo
 - **Esperado:** mapas de grind para o seu nível com sprites dos mobs.
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
-## 8. Aba Fontes
+## 8. Aba Config. (antes "Fontes")
 - **Fazer:** abrir Fontes; clicar em ⟳; adicionar um link extra `https://` do meowdb e depois removê-lo com ✕; tentar um link de outro domínio e um `http://`; desligar e religar a sincronização automática.
 - **Esperado:** a aba Fontes mostra N guias automáticos (N maior que 0) e a hora da última sincronização; ⟳ sincroniza na hora; o link extra entra na lista e o ✕ o remove; o link de outro site ou `http://` é rejeitado com mensagem. Com a sincronização desligada ficam só os links extras (os guias e o Quest Database deixam de ser carregados); ao religar, voltam. O EXP/h e a cor do veredito **não** zeram ao sincronizar.
 - **Resultado:** ☐ ok ☐ falhou — observações:

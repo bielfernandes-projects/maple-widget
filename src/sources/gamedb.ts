@@ -3,11 +3,11 @@ import path from 'node:path';
 import * as cheerio from 'cheerio';
 import { isAllowedUrl } from './allowlist';
 import { USER_AGENT } from './discover';
-import type { Entrada, GameDb, Local, Monster } from '../types';
+import type { Drop, Entrada, GameDb, Local, Monster } from '../types';
 
 // Base do jogo: ~200 páginas de monstro (incremental por lastmod) + 3 índices (mapas, NPCs, itens; 1 requisição cada).
 // "Dropped By" dos itens carrega no cliente do meowdb, então itens ficam só como índice (nome + link).
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 const BASE = 'https://meowdb.com';
 const CONCORRENCIA = 3;
 const INDICE_TTL_MS = 24 * 3_600_000, SEM_LASTMOD_TTL_MS = 7 * 24 * 3_600_000;
@@ -42,7 +42,25 @@ export function parseMonster(html: string, url: string): Monster | null {
     if (!mapaId) return;
     locais.push({ mapaId, mapa: limpa(a.text()), regiao: limpa(td.first().find('span').first().text()), qtd: num(td.eq(1).text()), respawn: limpa(td.last().text()) || undefined });
   });
-  return { id, name, level, exp, hp, iconUrl: `${BASE}/msclassic/monsters/sprites/mob_${id}.png`, locais, sourceUrl: url };
+  return { id, name, level, exp, hp, iconUrl: `${BASE}/msclassic/monsters/sprites/mob_${id}.png`, locais, drops: parseDrops($), sourceUrl: url };
+}
+
+// tabela "OSMLIB Reference Drop Rates" (estática no HTML; os drops confirmados pela comunidade carregam só no navegador)
+function parseDrops($: cheerio.CheerioAPI): Drop[] {
+  const h = $('h2').filter((_, e) => /OSMLIB/i.test($(e).text())).first();
+  const out: Drop[] = [];
+  h.parent().find('table tbody tr, table tr').each((_, r) => {
+    const td = $(r).find('td');
+    const a = td.first().find('a').first();
+    const itemId = a.attr('href')?.match(/\/item-db\/(\d+)/)?.[1];
+    const nome = limpa(a.find('span').first().text() || a.text());
+    const taxa = limpa(td.eq(1).find('a').first().text() || td.eq(1).text().split('About')[0]);
+    const pct = parseFloat(taxa.replace(',', '.'));
+    const src = a.find('img').attr('src');
+    if (!itemId || !nome || !Number.isFinite(pct)) return;
+    out.push({ itemId, nome, taxa, pct, iconUrl: src?.startsWith('/') ? BASE + src : undefined });
+  });
+  return out.slice(0, 60);
 }
 
 export function parseIndice(html: string, tipo: Tipo): Entrada[] {

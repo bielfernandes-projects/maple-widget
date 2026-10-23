@@ -40,6 +40,23 @@ describe('parseMonster', () => {
   });
 });
 
+describe('parseMonster: drops', () => {
+  const html = (linhas: string) => `<html><head><title>Green Mushroom | NiaMeowDB</title></head><body><h1>Green Mushroom</h1>
+    <section><h2>OSMLIB Reference Drop Rates</h2><table><tr><th scope="col">Item</th><th scope="col">OSMLib rate</th></tr>${linhas}</table></section></body></html>`;
+  const row = (id: string, ico: string, nome: string, taxa: string) => `<tr><td><a href="/msclassic/item-db/${id}"><img src="/msclassic/api/assets/icons/${ico}" alt=""><span>${nome}</span></a></td><td><a href="https://osmlib.com/?search=1" target="_blank">${taxa}</a><span>About 1 in 2</span></td></tr>`;
+  it('lê item, ícone e taxa da tabela OSMLib', () => {
+    const m = parseMonster(html(row('506', '4031068', 'Animal Fossil', '50%') + row('417', '4010000', 'Silver Ore', '0.3%')), 'https://meowdb.com/msclassic/monsters/13')!;
+    expect(m.drops).toEqual([
+      { itemId: '506', nome: 'Animal Fossil', taxa: '50%', pct: 50, iconUrl: 'https://meowdb.com/msclassic/api/assets/icons/4031068' },
+      { itemId: '417', nome: 'Silver Ore', taxa: '0.3%', pct: 0.3, iconUrl: 'https://meowdb.com/msclassic/api/assets/icons/4010000' },
+    ]);
+  });
+  it('sem a tabela, ou com linhas quebradas, não derruba o monstro', () => {
+    expect(parseMonster('<html><title>x</title><h1>Slime</h1></html>', 'https://meowdb.com/msclassic/monsters/7')!.drops).toEqual([]);
+    expect(parseMonster(html('<tr><td>sem link</td><td>?</td></tr>'), 'https://meowdb.com/msclassic/monsters/13')!.drops).toEqual([]);
+  });
+});
+
 describe('parseIndice', () => {
   it('mapas, NPCs e itens', () => {
     const mapas = parseIndice(fx('maps-all.html'), 'mapa');
@@ -69,21 +86,25 @@ describe('validConsulta', () => {
   });
 });
 
-const mon = (id: string, name: string, level: number, locais: Monster['locais']): Monster =>
-  ({ id, name, level, exp: 4, hp: 51, locais, sourceUrl: `https://meowdb.com/msclassic/monsters/${id}` });
+const mon = (id: string, name: string, level: number, locais: Monster['locais'], drops: Monster['drops'] = []): Monster =>
+  ({ id, name, level, exp: 4, hp: 51, iconUrl: `https://meowdb.com/msclassic/monsters/sprites/mob_${id}.png`, locais, drops, sourceUrl: `https://meowdb.com/msclassic/monsters/${id}` });
+const drop = (itemId: string, nome: string, taxa: string): Monster['drops'][number] => ({ itemId, nome, taxa, pct: parseFloat(taxa), iconUrl: 'https://meowdb.com/msclassic/api/assets/icons/' + itemId });
 const DB: GameDb = {
   monstros: [
-    mon('3', 'Blue Snail', 2, [{ mapaId: '42', mapa: 'Snail Hunting Ground III', regiao: 'Maple Road', qtd: 21 }, { mapaId: '50', mapa: 'Split Road', regiao: 'Maple Road', qtd: 3 }]),
-    mon('2', 'Snail', 1, [{ mapaId: '42', mapa: 'Snail Hunting Ground III', regiao: 'Maple Road', qtd: 10 }]),
+    mon('3', 'Blue Snail', 2, [{ mapaId: '42', mapa: 'Snail Hunting Ground III', regiao: 'Maple Road', qtd: 21 }, { mapaId: '50', mapa: 'Split Road', regiao: 'Maple Road', qtd: 3 }],
+      [drop('7', 'Snail Shell', '0.3%'), drop('8', 'Red Potion', '2%')]),
+    mon('2', 'Snail', 1, [{ mapaId: '42', mapa: 'Snail Hunting Ground III', regiao: 'Maple Road', qtd: 10 }], [drop('7', 'Snail Shell', '40%')]),
     mon('9', 'Cogumelo Zombi', 20, []),
   ],
   entradas: [
     { tipo: 'mapa', id: '42', nome: 'Snail Hunting Ground III', info: undefined, sourceUrl: 'https://meowdb.com/msclassic/maps/42' },
     { tipo: 'npc', id: '1', nome: 'Alcaster', info: 'El Nath Market', sourceUrl: 'https://meowdb.com/msclassic/npcs/1' },
-    { tipo: 'item', id: '5', nome: 'Snail Shell', sourceUrl: 'https://meowdb.com/msclassic/item-db/5' },
+    { tipo: 'item', id: '7', nome: 'Snail Shell', sourceUrl: 'https://meowdb.com/msclassic/item-db/7' },
+    { tipo: 'item', id: '99', nome: 'Raro Sem Drop', sourceUrl: 'https://meowdb.com/msclassic/item-db/99' },
   ],
 };
 const quests = [{ id: 'q', name: 'Ajudar Alcaster', npc: 'Alcaster', level: 30, exp: 900, reward: '', sourceUrl: 'u' }];
+const sec = (r: { secoes: { titulo: string }[] }, prefixo: string) => (r.secoes as any[]).find((x) => x.titulo.startsWith(prefixo));
 
 describe('buscar', () => {
   it('exato vence prefixo, e empate de prefixo segue monstro, mapa, NPC, item', () => {
@@ -93,28 +114,49 @@ describe('buscar', () => {
     expect(buscar(DB, [], [], 'cogumelo zombi')[0].titulo).toBe('Cogumelo Zombi');
     expect(buscar(DB, [], [], 'COGUMÉLO')[0].titulo).toBe('Cogumelo Zombi');
   });
-  it('monstro lista os mapas onde aparece, do mais povoado', () => {
+  it('monstro: seção de mapas (do mais povoado) e seção de drops (da maior taxa) com ícone', () => {
     const r = buscar(DB, [], [], 'blue snail')[0];
     expect(r.tipo).toBe('monstro');
     expect(r.sub).toBe('Lv 2 · 4 EXP · 51 HP');
-    expect(r.linhas[0]).toContain('Snail Hunting Ground III (Maple Road) · 21x');
-    expect(r.linhas[1]).toContain('Split Road');
+    const mapas = sec(r, 'Aparece em');
+    expect(mapas.titulo).toBe('Aparece em (2)');
+    expect(mapas.linhas[0]).toEqual({ nome: 'Snail Hunting Ground III', info: 'Maple Road · 21x' });
+    expect(mapas.linhas[1].nome).toBe('Split Road');
+    const drops = sec(r, 'Drops');
+    expect(drops.titulo).toBe('Drops (2)');
+    expect(drops.linhas.map((l: any) => [l.nome, l.info])).toEqual([['Red Potion', '2%'], ['Snail Shell', '0.3%']]);
+    expect(drops.linhas[0].iconUrl).toContain('/icons/8');
+    expect(drops.nota).toMatch(/OSMLib/);
+  });
+  it('monstro sem drops conhecidos não ganha seção de drops', () => {
+    expect(sec(buscar(DB, [], [], 'cogumelo')[0], 'Drops')).toBeUndefined();
+  });
+  it('item: lista os monstros que dropam, da maior taxa, com ícone do mob e o ícone do item', () => {
+    const r = buscar(DB, [], [], 'snail shell').find((x) => x.tipo === 'item')!;
+    expect(r.iconUrl).toContain('/icons/7');
+    const q = sec(r, 'Dropado por');
+    expect(q.titulo).toBe('Dropado por (2)');
+    expect(q.linhas.map((l: any) => [l.nome, l.info])).toEqual([['Snail', 'Lv 1 · 40%'], ['Blue Snail', 'Lv 2 · 0.3%']]);
+    expect(q.linhas[0].iconUrl).toContain('mob_2');
+  });
+  it('item sem dados de drop: sem seção, só o link', () => {
+    expect(buscar(DB, [], [], 'raro sem drop')[0]).toMatchObject({ tipo: 'item', secoes: [], url: 'https://meowdb.com/msclassic/item-db/99' });
   });
   it('mapa lista os monstros dele (inversão) e o EXP/h do guia', () => {
     const g = [{ name: 'Snail Hunting Ground III', street: '', maxExpHr: 12345, mob: { name: 'Blue Snail' }, why: '', levelMin: 1, levelMax: 10, sourceUrl: 'u' }];
     const r = buscar(DB, [], g, 'hunting ground').find((x) => x.tipo === 'mapa')!;
-    expect(r.linhas[0]).toContain('12.345');
-    expect(r.linhas.slice(1)).toEqual(['Blue Snail (Lv 2) · 21x', 'Snail (Lv 1) · 10x']);
+    expect(sec(r, 'Guia').linhas[0].info).toContain('12.345');
+    expect(sec(r, 'Monstros').linhas.map((l: any) => [l.nome, l.info])).toEqual([['Blue Snail', 'Lv 2 · 21x'], ['Snail', 'Lv 1 · 10x']]);
   });
-  it('NPC lista as quests dele; item só aponta o link', () => {
-    expect(buscar(DB, quests, [], 'alcaster')[0].linhas).toEqual(['Ajudar Alcaster · Lv 30 · 900 EXP']);
-    expect(buscar(DB, [], [], 'shell')[0]).toMatchObject({ tipo: 'item', linhas: [], url: 'https://meowdb.com/msclassic/item-db/5' });
+  it('NPC lista as quests dele', () => {
+    expect(sec(buscar(DB, quests, [], 'alcaster')[0], 'Quests').linhas).toEqual([{ nome: 'Ajudar Alcaster', info: 'Lv 30 · 900 EXP' }]);
   });
   it('acha quests pelo nome e devolve todas as linhas (sem truncar)', () => {
     const r = buscar(DB, quests, [], 'ajudar')[0];
-    expect(r).toMatchObject({ tipo: 'quest', sub: 'Lv 30 · 900 EXP', linhas: ['NPC: Alcaster'] });
+    expect(r).toMatchObject({ tipo: 'quest', sub: 'Lv 30 · 900 EXP' });
+    expect(sec(r, 'Detalhes').linhas[0]).toEqual({ nome: 'NPC', info: 'Alcaster' });
     const muitos: GameDb = { monstros: [mon('1', 'Slime', 5, Array.from({ length: 30 }, (_, i) => ({ mapaId: String(i), mapa: 'M' + i, regiao: '', qtd: 30 - i })))], entradas: [] };
-    expect(buscar(muitos, [], [], 'slime')[0].linhas).toHaveLength(30);
+    expect(sec(buscar(muitos, [], [], 'slime')[0], 'Aparece em').linhas).toHaveLength(30);
   });
   it('consulta vazia ou sem acerto, e respeita o limite', () => {
     expect(buscar(DB, [], [], '  ')).toEqual([]);

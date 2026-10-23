@@ -85,9 +85,8 @@ function render() {
   if (vm.expandido) {
     if (showCard) kids.push(levelCard(cardData!));
     kids.push(h('div', { class: 'tabs nodrag', role: 'tablist' }, ...(['agora', 'quests', 'mapas', 'buscar', 'fontes'] as const).map((t) =>
-      h('button', { class: t === tab ? 'on' : '', role: 'tab', 'aria-selected': String(t === tab), onclick: () => { tab = t; fontesMsg = ''; render(); } }, t[0].toUpperCase() + t.slice(1)))));
+      h('button', { class: t === tab ? 'on' : '', role: 'tab', 'aria-selected': String(t === tab), onclick: () => { tab = t; fontesMsg = ''; render(); } }, t === 'fontes' ? 'Config.' : t[0].toUpperCase() + t.slice(1)))));
     kids.push(h('div', { class: 'body nodrag' }, ...vm.avisos.map((a) => h('div', { class: 'warn' }, a)), ...tabBody(vm)));
-    kids.push(footer(vm));
   }
   app.replaceChildren(...kids);
   const body = app.querySelector('.body');
@@ -156,21 +155,27 @@ function tabBody(v: ViewModel): Kid[] {
 
 const TIPOS = { monstro: 'Monstro', mapa: 'Mapa', quest: 'Quest', npc: 'NPC', item: 'Item' } as const;
 const abertos = new Set<string>(), verTudo = new Set<string>(); // sobrevivem ao render() (o vm chega a cada 2 s)
-const PREVIA = 8;
+const PREVIA = 6;
 function resRow(r: Resultado) {
   const k = r.tipo + '|' + r.url;
   const det = h('div', { class: 'det' });
   const pinta = () => {
-    const todos = verTudo.has(k), ls = todos ? r.linhas : r.linhas.slice(0, PREVIA);
-    const mais = r.linhas.length > PREVIA ? h('button', { onclick: (ev: Event) => { ev.stopPropagation(); if (todos) verTudo.delete(k); else verTudo.add(k); pinta(); } },
-        todos ? 'Ver menos ▴' : `Ver mais (+${r.linhas.length - PREVIA}) ▾`) : null;
-    det.replaceChildren(...ls.map((l) => h('div', { class: 'm' }, l)), ...(mais ? [mais] : []),
-      h('button', { onclick: (ev: Event) => { ev.stopPropagation(); void window.api.openSource(r.url); } }, 'Abrir no meowdb ↗'));
+    const kids: Kid[] = [];
+    for (const sec of r.secoes) {
+      const sk = k + '|' + sec.titulo, todos = verTudo.has(sk), ls = todos ? sec.linhas : sec.linhas.slice(0, PREVIA);
+      kids.push(h('div', { class: 'sec-t' }, sec.titulo), sec.nota ? h('div', { class: 'nota' }, sec.nota) : null,
+        h('div', { class: 'tab' }, ...ls.map((l) => h('div', { class: 'tr' }, icon(l.iconUrl), h('span', { class: 'tn', title: l.nome }, l.nome), h('span', { class: 'ti' }, l.info ?? '')))),
+        sec.linhas.length > PREVIA ? h('button', { class: 'mais', onclick: (ev: Event) => { ev.stopPropagation(); if (todos) verTudo.delete(sk); else verTudo.add(sk); pinta(); } },
+          todos ? 'Ver menos ▴' : `Ver mais (+${sec.linhas.length - PREVIA}) ▾`) : null);
+    }
+    if (!r.secoes.length) kids.push(h('div', { class: 'm' }, 'Sem detalhes aqui; veja no meowdb.'));
+    kids.push(h('button', { onclick: (ev: Event) => { ev.stopPropagation(); void window.api.openSource(r.url); } }, 'Abrir no meowdb ↗'));
+    det.replaceChildren(...kids.filter((x): x is Node => !!x));
   };
   pinta();
   det.hidden = !abertos.has(k);
   const row = h('div', { class: 'row res', onclick: () => { if (abertos.has(k)) abertos.delete(k); else abertos.add(k); det.hidden = !abertos.has(k); } }, icon(r.iconUrl),
-    h('div', { class: 't' }, h('b', null, r.titulo), h('span', { class: 'm' }, `${TIPOS[r.tipo]} · ${r.sub}`)));
+    h('div', { class: 't' }, h('b', null, r.titulo), h('span', { class: 'm' }, [TIPOS[r.tipo], r.sub].filter(Boolean).join(' · '))));
   return h('div', null, row, det);
 }
 function buscaTab(): Kid[] {
@@ -214,7 +219,7 @@ function fontesTab(v: ViewModel): Kid[] {
     h('button', { onclick: () => void window.api.setAutoSync(!v.sync.auto) }, v.sync.auto ? 'Desligar' : 'Ligar'),
     h('button', { title: 'Sincronizar agora', 'aria-label': 'Sincronizar agora', onclick: () => void window.api.syncNow() }, '⟳'));
   return [
-    auto, h('div', { class: 'row' }, input, h('button', { onclick: () => void add() }, 'Adicionar')), msg,
+    ajustes(v), auto, h('div', { class: 'row' }, input, h('button', { onclick: () => void add() }, 'Adicionar')), msg,
     ...v.fontes.filter((f) => !f.auto).map((f) => h('div', { class: 'row' }, h('div', { class: 't' }, h('b', null, f.title),
       h('span', { class: 'm' }, `${f.status} · ${f.counts.maps} mapas, ${f.counts.quests} quests, ${f.counts.tips} dicas · ${f.fetchedAt ? new Date(f.fetchedAt).toLocaleString('pt-BR') : 'nunca'}`)),
       h('button', { title: 'Remover fonte', 'aria-label': 'Remover fonte', onclick: () => void window.api.removeSource(f.url) }, '✕'))),
@@ -226,15 +231,15 @@ function fontesTab(v: ViewModel): Kid[] {
   ];
 }
 
-function footer(v: ViewModel) {
+function ajustes(v: ViewModel) {
   const r = h('input', { type: 'range', min: '0.3', max: '1', step: '0.05', value: String(v.opacidade), class: 'nodrag' });
   r.addEventListener('pointerdown', () => { dragging = true; });
   const fim = () => { dragging = false; };
   r.addEventListener('pointerup', fim); r.addEventListener('pointercancel', fim);
   r.addEventListener('input', () => void window.api.setOpacity(Number(r.value)));
   r.addEventListener('change', () => { dragging = false; r.blur(); });
-  return h('div', { class: 'foot nodrag' }, h('label', { class: 'opac' }, 'Opacidade ', r),
-    h('span', { class: 'keys' }, 'Ctrl+Alt+M oculta · Ctrl+Alt+C click-through · Ctrl+Alt+Q sai'));
+  return h('div', { class: 'ajustes' }, h('label', { class: 'opac' }, 'Opacidade ', r),
+    h('div', { class: 'm keys' }, 'Atalhos: Ctrl+Alt+F busca · Ctrl+Alt+M oculta · Ctrl+Alt+C click-through · Ctrl+Alt+Q sai'));
 }
 
 // canto de redimensionar: arrasta e pede o novo tamanho ao main

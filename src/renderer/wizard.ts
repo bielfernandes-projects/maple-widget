@@ -162,7 +162,7 @@ export function startWizard(onDone: () => void) {
     img.onload = () => { cv.width = shot.w; cv.height = shot.h; paint(); say(); };
     img.src = shot.dataUrl;
     const aviso = shot.fuente === 'arquivo'
-      ? el('div', 'warn', `Calibração feita sem o jogo aberto: só vale se a janela capturada tiver exatamente ${shot.w}x${shot.h}. Recomendado recalibrar com o jogo aberto (aba Fontes → Recalibrar HUD).`)
+      ? el('div', 'warn', `Calibração feita sem o jogo aberto: só vale se a janela capturada tiver exatamente ${shot.w}x${shot.h}. Recomendado recalibrar com o jogo aberto (aba Config. → Recalibrar HUD).`)
       : null;
     const escMsg = el('div', 'm');
     // btn() já desabilita todos os botões enquanto a detecção roda
@@ -181,7 +181,7 @@ export function startWizard(onDone: () => void) {
     ++tok; void window.api.setExpanded(true);
     const msg = el('div', 'm');
     show(body(el('h4', undefined, `Passo 4/${TOTAL} · Guias`),
-      el('div', 'm', 'Todos os guias do MapleStory Classic no meowdb entram automaticamente e se mantêm atualizados. Links extras podem ser colados depois, na aba Fontes.'),
+      el('div', 'm', 'Todos os guias do MapleStory Classic no meowdb entram automaticamente e se mantêm atualizados. Links extras podem ser colados depois, na aba Config..'),
       btn('Sincronizar agora', async () => { msg.textContent = 'Sincronizando…'; await window.api.syncNow(); msg.textContent = 'Guias sincronizados.'; }),
       msg,
       btn('Concluir', async () => {

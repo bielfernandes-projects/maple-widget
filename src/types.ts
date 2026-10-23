@@ -40,7 +40,9 @@ export type Library = { maps: GrindMap[]; quests: Quest[]; expRows: ExpRow[]; ti
 
 // base do jogo (meowdb): monstros com onde aparecem + índices de mapas/NPCs/itens
 export type Local = { mapaId: string; mapa: string; regiao: string; qtd: number; respawn?: string };
-export type Monster = { id: string; name: string; level: number; exp: number; hp: number; iconUrl?: string; locais: Local[]; sourceUrl: string };
+// drop de referência (tabela OSMLib no meowdb): a taxa pode não ser a do Classic
+export type Drop = { itemId: string; nome: string; taxa: string; pct: number; iconUrl?: string };
+export type Monster = { id: string; name: string; level: number; exp: number; hp: number; iconUrl?: string; locais: Local[]; drops: Drop[]; sourceUrl: string };
 export type Entrada = { tipo: 'item' | 'npc' | 'mapa'; id: string; nome: string; info?: string; sourceUrl: string };
 export type GameDb = { monstros: Monster[]; entradas: Entrada[] };
 

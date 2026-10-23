@@ -29,7 +29,7 @@ export const quadroValeParaRegioes = (montadoCom: string, calib: Record<string, 
 
 // quadro ao vivo sem calibração salva para a sua chave: avisa (as posições padrão podem não bater com a HUD)
 export const avisoSemCalibracao = (calib: Record<string, Regions>, w: number, h: number): string | null =>
-  Object.hasOwn(calib, `${w}x${h}`) ? null : `Sem calibração para ${w}x${h} — usando posições padrão. Fontes → Recalibrar HUD.`;
+  Object.hasOwn(calib, `${w}x${h}`) ? null : `Sem calibração para ${w}x${h} — usando posições padrão. Config. → Recalibrar HUD.`;
 
 export function parseLevel(t: string): number | undefined {
   const d = t.replace(/\D/g, '');

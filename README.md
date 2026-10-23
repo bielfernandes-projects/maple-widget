@@ -15,8 +15,8 @@ It **only looks at the screen**: it doesn't touch the game, read its memory or i
 
 ## Download & use
 
-1. Open [**Releases**](../../releases/latest) and download **`Maple-Widget-0.1.3-win-x64.zip`**.
-2. Extract it and run **`Maple Widget 0.1.3.exe`**. It's portable: nothing gets installed.
+1. Open [**Releases**](../../releases/latest) and download **`Maple-Widget-0.1.4-win-x64.zip`**.
+2. Extract it and run **`Maple Widget 0.1.4.exe`**. It's portable: nothing gets installed.
 3. **Windows will warn you** ("Windows protected your PC") because the app isn't signed with a paid certificate. Click **More info → Run anyway**. The source code is in this repository so you can check it.
 4. Follow the setup wizard (below).
 
@@ -49,7 +49,7 @@ Drag the widget by its top bar and **resize** it from the bottom-right corner. P
 - **Now:** level, EXP bar, EXP/h and the verdict. Green: your EXP/h is ≥ 70% of the best map's maximum for your level; yellow: ≥ 40%; red: below; gray: no data. The guide value is a **ceiling**, not an average.
 - **Quests / Maps:** what's worth doing at your level, from the meowdb guides and Quest Database (~340 quests). You can tick quests as done.
 - **Search:** monsters (level, EXP, HP and **which maps they spawn in**), maps (which monsters live there), NPCs (their quests) and items (opens the item page on meowdb, where the drops are listed).
-- **Sources:** every meowdb guide is added automatically and kept up to date. You can paste extra links (`https://` meowdb/niadb only).
+- **Config. (Settings):** opacity, hotkeys and the Support buttons; every meowdb guide is added automatically and kept up to date. You can paste extra links (`https://` meowdb/niadb only).
 - **Level up:** a card with **AP and SP** tips for your class and a button to open the guide.
 
 ## Heads-up (read before using)
@@ -61,7 +61,7 @@ Drag the widget by its top bar and **resize** it from the bottom-right corner. P
 - **Windows SmartScreen.** The executable isn't signed, so the warning is expected. Download **only** from this repository's Releases page.
 - **Exclusive fullscreen doesn't work** (the capture comes out black). Use **windowed** or **borderless**.
 - **Resolution and DPI.** Level, EXP and class are read at any of the game's windowed resolutions; confirmed live at **800×600** and on real screenshots at **1366×768** and **1920×1080** (1024×768 and 1280×720 should work but are less tested). The map name is matched against meowdb's list of maps, so OCR typos get fixed. Windows DPI scaling may need recalibration (**Detect scale** helps). Calibration is stored per resolution.
-- **OCR can be wrong.** Check the numbers the first time; if something looks off, recalibrate in **Sources → Recalibrate HUD**.
+- **OCR can be wrong.** Check the numbers the first time; if something looks off, recalibrate in **Config. → Recalibrar HUD** (Settings tab).
 - **First run** downloads the meowdb data (~200 monster pages and 3 indexes). It can take a few minutes; search already works with whatever has been downloaded.
 
 ## Where data lives
@@ -98,7 +98,7 @@ The OCR model (`eng.traineddata`, Tesseract) lives in `resources/tessdata` under
 
 ## Support the project ♥
 
-Free and open to everyone. If it helped you and you'd like to chip in, you can donate (optional) by card or PayPal on **[Ko-fi](https://ko-fi.com/bielfernandesz)**. There is also an **Apoiar** button in the widget's *Fontes* tab. Thank you!
+Free and open to everyone. If it helped you and you'd like to chip in, you can donate (optional) by card or PayPal on **[Ko-fi](https://ko-fi.com/bielfernandesz)**. The widget's *Config.* tab also has Ko-fi and Pix buttons. Thank you!
 
 ## Credits
 
@@ -123,8 +123,8 @@ Ele **só olha a tela**: não mexe no jogo, não lê a memória e não injeta na
 
 ## Baixar e usar
 
-1. Abra a página de [**Releases**](../../releases/latest) e baixe o arquivo **`Maple-Widget-0.1.3-win-x64.zip`**.
-2. Extraia o zip e abra **`Maple Widget 0.1.3.exe`**. É portátil: não instala nada.
+1. Abra a página de [**Releases**](../../releases/latest) e baixe o arquivo **`Maple-Widget-0.1.4-win-x64.zip`**.
+2. Extraia o zip e abra **`Maple Widget 0.1.4.exe`**. É portátil: não instala nada.
 3. **O Windows vai avisar** ("O Windows protegeu o computador"), porque o programa não tem assinatura digital paga. Clique em **Mais informações → Executar assim mesmo**. O código-fonte está neste repositório para você conferir.
 4. Siga o assistente de configuração (abaixo).
 
@@ -155,7 +155,7 @@ Dá para **arrastar** o widget pela barra de cima e **redimensionar** pelo canto
 - **Agora:** level, barra de EXP, EXP/h e o veredito. Verde: seu EXP/h é ≥ 70% do máximo do melhor mapa do seu level; amarelo: ≥ 40%; vermelho: abaixo; cinza: sem dados. O valor do guia é um **teto**, não uma média.
 - **Quests / Mapas:** o que vale a pena no seu level, vindo dos guias e do Quest Database do meowdb (~340 quests). Dá para marcar quests como feitas.
 - **Buscar:** monstros (level, EXP, HP e **em quais mapas aparecem**), mapas (que monstros têm), NPCs (quests deles) e itens (abre a página do item no meowdb, onde aparece quem dropa).
-- **Fontes:** todos os guias do meowdb entram sozinhos e se mantêm atualizados. Você pode colar links extras (só `https://` do meowdb/niadb).
+- **Config.:** opacidade, atalhos e Apoiar; todos os guias do meowdb entram sozinhos e se mantêm atualizados. Você pode colar links extras (só `https://` do meowdb/niadb).
 - **Level up:** cartão com dicas de **AP e SP** da sua classe e botão para abrir o guia.
 
 ## Cuidados (leia antes de usar)
@@ -167,7 +167,7 @@ Dá para **arrastar** o widget pela barra de cima e **redimensionar** pelo canto
 - **Windows SmartScreen.** O executável não é assinado, então o aviso é esperado. Baixe **somente** pela página de Releases deste repositório.
 - **Tela cheia exclusiva não funciona** (a captura sai preta). Use **janela** ou **borderless**.
 - **Resolução e DPI.** Level, EXP e classe são lidos em qualquer resolução em janela do jogo; confirmado ao vivo em **800×600** e em screenshots reais de **1366×768** e **1920×1080** (1024×768 e 1280×720 devem funcionar, mas foram menos testadas). O nome do mapa é casado com a lista de mapas do meowdb, o que corrige erros do OCR. Escala de DPI do Windows pode exigir recalibração (**Detectar escala** ajuda). A calibração é guardada por resolução.
-- **Leitura por OCR pode errar.** Confira os números na primeira vez; se algo estiver estranho, recalibre em **Fontes → Recalibrar HUD**.
+- **Leitura por OCR pode errar.** Confira os números na primeira vez; se algo estiver estranho, recalibre em **Config. → Recalibrar HUD**.
 - **Primeira abertura:** baixa a base do meowdb (cerca de 200 páginas de monstros e 3 índices). Pode levar alguns minutos; a busca já funciona com o que foi baixado.
 
 ## Onde ficam os dados
@@ -187,7 +187,7 @@ Grátis e aberto para todos. Se ajudou e você quiser contribuir (opcional):
 - **Pix** (Brasil): chave aleatória `03b41bfd-8f32-4c81-aa8c-23a0ac6bacf9`
 - **[Ko-fi](https://ko-fi.com/bielfernandesz)** (cartão e PayPal, de qualquer país)
 
-No widget, a aba **Fontes** tem os botões **Ko-fi** e **Pix** (este copia a chave). Obrigado!
+No widget, a aba **Config.** tem os botões **Ko-fi** e **Pix** (este copia a chave). Obrigado!
 
 ## Para desenvolvedores
 
