@@ -1,10 +1,10 @@
 # Teste com o jogo aberto
 
 Rode o `Maple Widget` (portable) com o MapleStory Classic aberto. Em cada item, marque o resultado.
-Na primeira execução é preciso internet (baixa os dados do OCR).
+O OCR não precisa de internet (o modelo vem no app); a internet só é usada para os guias do meowdb/niadb.
 
 ## Onde ficam os dados
-Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela foi `%APPDATA%\maple-widget\` (minúsculas, com hífen), não "Maple Widget". Lá ficam o `config.json`, `tessdata\` (`eng.traineddata`, dados do OCR, 5,2 MB, gravado no primeiro início) e, depois da primeira sincronização, `guias\` com um `.json` por guia e o `auto-index.json`. (A pasta `Cache\` é do Chromium; versões anteriores punham os guias nela, e o app copia esses `.json` para `guias\` uma vez.) Para testar do zero, apague a pasta.
+Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela foi `%APPDATA%\maple-widget\` (minúsculas, com hífen), não "Maple Widget". Lá ficam o `config.json`, o `log.txt` (registro do app), `tessdata\` (cópia de trabalho do `eng.traineddata`, 5,2 MB, feita a partir do modelo embutido no app) e, depois da primeira sincronização, `guias\` com um `.json` por guia e o `auto-index.json`. (A pasta `Cache\` é do Chromium; versões anteriores punham os guias nela, e o app copia esses `.json` para `guias\` uma vez.) Para testar do zero, apague a pasta.
 
 ## 1. Assistente, passos 1 e 2: pasta e janela do jogo
 - **Fazer:** abrir o app pela primeira vez. Passo 1: conferir a pasta (padrão `C:\Nexon\Library\maplestorycw`); tentar uma pasta inexistente. Passo 2: escolher a janela do jogo ou "Detectar automaticamente".
@@ -47,8 +47,8 @@ Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela fo
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 8. Aba Fontes
-- **Fazer:** abrir Fontes; clicar em ⟳; desligar/ligar uma fonte; adicionar um link extra do meowdb; tentar um link de outro domínio.
-- **Esperado:** a aba Fontes mostra N guias automáticos (N maior que 0) e a hora da última sincronização; ⟳ sincroniza na hora; o toggle liga/desliga a fonte; o link extra entra na lista; o link de outro site é rejeitado com mensagem.
+- **Fazer:** abrir Fontes; clicar em ⟳; adicionar um link extra `https://` do meowdb e depois removê-lo com ✕; tentar um link de outro domínio e um `http://`; desligar e religar a sincronização automática.
+- **Esperado:** a aba Fontes mostra N guias automáticos (N maior que 0) e a hora da última sincronização; ⟳ sincroniza na hora; o link extra entra na lista e o ✕ o remove; o link de outro site ou `http://` é rejeitado com mensagem. Com a sincronização desligada ficam só os links extras (os guias e o Quest Database deixam de ser carregados); ao religar, voltam. O EXP/h e a cor do veredito **não** zeram ao sincronizar.
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 9. Offline (cache)
@@ -57,8 +57,14 @@ Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela fo
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 10. Atalhos
-- **Fazer:** `Ctrl+Alt+M` e `Ctrl+Alt+C`.
-- **Esperado:** M esconde/mostra o widget; C liga/desliga o click-through (cliques passam para o jogo).
+- **Fazer:** `Ctrl+Alt+M`, `Ctrl+Alt+C` e, por último, `Ctrl+Alt+Q`; abrir o app de novo e clicar no ✕ do topo do widget; com o widget aberto, dar dois cliques no `.exe` outra vez.
+- **Esperado:** M esconde/mostra o widget; C liga/desliga o click-through (cliques passam para o jogo); Q e o ✕ fecham o app (posição e opacidade ficam salvas); o segundo clique no `.exe` não abre outro widget (só traz o atual para a frente).
+
+| Atalho | Ação |
+|---|---|
+| `Ctrl+Alt+M` | mostrar / ocultar |
+| `Ctrl+Alt+C` | click-through |
+| `Ctrl+Alt+Q` | sair (igual ao botão ✕) |
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 11. Persistência de posição e opacidade
@@ -68,26 +74,26 @@ Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela fo
 
 ## 12. Outra resolução ou tamanho de janela
 - **Fazer:** mudar a resolução/tamanho da janela do jogo.
-- **Esperado:** aviso de calibração para a nova resolução; recalibrar funciona e a calibração anterior é mantida para a antiga.
+- **Esperado:** aparece o aviso "Sem calibração para LxA — usando posições padrão. Fontes → Recalibrar HUD." (com a resolução nova no lugar de LxA); recalibrar funciona, o aviso some e a calibração anterior é mantida para a resolução antiga.
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 13. CPU e RAM
 - **Fazer:** com o jogo rodando, abrir o Gerenciador de Tarefas e somar os processos "Maple Widget" por 2 minutos.
-- **Esperado:** sem engasgos no jogo; anotar CPU média (%) e memória (MB). Para ler: Gerenciador de Tarefas → Detalhes → "Maple Widget" e seus processos filhos (são vários); some CPU e memória de todos. Referência (medição de desenvolvimento com `scripts\perf-probe.ps1`, soma de todos os processos, em % de um núcleo): capturando uma janela de teste por 60 s, 23,6 % antes da otimização e 3,9 % depois (pico de memória 688 → 621 MB); parado, sem a janela do jogo, por 30 s, 6,4 % → 1,8 % (pico 493 → 473 MB). Com o jogo de verdade o OCR pesado (level, classe e mapa) só roda quando esses trechos da HUD mudam e a cada 30 s, então picos curtos ao subir de level ou trocar de mapa são normais. Se o seu número for bem maior, anote.
+- **Esperado:** sem engasgos no jogo; anotar CPU média (%) e memória (MB). Para ler: Gerenciador de Tarefas → Detalhes → "Maple Widget" e seus processos filhos (são vários); some CPU e memória de todos. Referência (medição de desenvolvimento com `scripts\perf-probe.ps1`, soma de todos os processos, em % de um núcleo): capturando uma janela de teste por 60 s, 23,6 % antes da otimização e 4,7 % depois (pico de memória 688 → 618 MB); parado, sem a janela do jogo, por 30 s, 6,4 % → 1,1 % (pico 493 → 477 MB). São números do app em modo de desenvolvimento (`electron .`); o `.exe` empacotado roda o mesmo código, mas não foi medido com a sonda, e o jogo real (1920×1080, HUD mudando) pode custar mais que a janela de teste. Com o jogo de verdade o OCR pesado (level, classe e mapa) só roda quando esses trechos da HUD mudam e a cada 30 s, então picos curtos ao subir de level ou trocar de mapa são normais. Se o seu número for bem maior, anote.
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
-## 14. Falha do OCR sem internet
-- **Fazer:** apagar a pasta `userData`, desligar a internet e abrir o app; depois religar a internet.
-- **Esperado:** aparece "Leitura da tela indisponível (falha ao preparar o OCR — verifique a conexão). Tentando de novo…"; o app tenta de novo a cada 30 s e se recupera sozinho quando a conexão volta.
+## 14. OCR sem internet
+- **Fazer:** apagar a pasta `userData`, desligar a internet e abrir o app com o jogo aberto.
+- **Esperado:** a leitura da HUD funciona normalmente (o modelo do OCR vem no app; o `log.txt` mostra `[ocr] pronto (modelo embutido)`); só os guias ficam indisponíveis até a internet voltar. Se o OCR falhar por outro motivo, o aviso é "Leitura da tela indisponível (falha ao preparar o OCR). Tentando de novo a cada 30 s…".
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 15. Coletar logs e prints para enviar
-- **Fazer:** os logs (`[app] empacotado`, `[ocr] pronto`) saem no stdout. O `.exe` portable NÃO entrega stdout a redirecionamentos (testei `Start-Process -RedirectStandardOutput`: arquivos vazios). Funciona com a versão desempacotada, `release\win-unpacked\Maple Widget.exe` (gerada por `npx electron-builder --win --dir`):
+- **Fazer:** fechar o app e enviar o arquivo `%APPDATA%\maple-widget\log.txt` (o mesmo registro do stdout, com data e hora; serve também para o `.exe` portable). Método alternativo, para quem gera o build: o `.exe` portable NÃO entrega stdout a redirecionamentos, mas a versão desempacotada `release\win-unpacked\Maple Widget.exe` (gerada por `npx electron-builder --win --dir`) entrega:
   ```powershell
   $p = Start-Process -FilePath ".\release\win-unpacked\Maple Widget.exe" -ArgumentList "--user-data-dir=$env:TEMP\mw-teste" -RedirectStandardOutput "$env:TEMP\mw.out" -RedirectStandardError "$env:TEMP\mw.err" -PassThru
   # use o app; para encerrar:
   taskkill /PID $p.Id /T /F
   ```
   Se os arquivos saírem vazios ou você só tem o portable, envie: um print do widget, um print do assistente ou da aba Fontes e o conteúdo do `config.json` da pasta `userData`.
-- **Esperado:** `mw.out` com `[app] empacotado v0.1.0` e `[ocr] pronto`; ou os prints e o `config.json`.
+- **Esperado:** `log.txt` (ou `mw.out`) com `[app] empacotado v0.1.0` e `[ocr] pronto (modelo embutido)`; ou os prints e o `config.json`.
 - **Resultado:** ☐ ok ☐ falhou — observações:

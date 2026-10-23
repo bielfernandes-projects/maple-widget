@@ -31,7 +31,7 @@ O `.exe` não é assinado; o Windows SmartScreen pode avisar na primeira execuç
 
 ## Primeira execução
 
-1. O app baixa os dados de idioma do OCR (precisa de internet nessa hora, uma única vez). Sem internet, o widget mostra "Leitura da tela indisponível" e tenta de novo a cada 30 s.
+1. O modelo do OCR (`eng.traineddata`, Tesseract, Apache-2.0) vem junto com o app: a leitura da tela funciona sem internet desde o primeiro início. A internet só é usada para baixar os guias (veja "Privacidade e segurança").
 2. O **assistente** ("Configuração inicial") tem 4 passos:
    1. **Pasta do jogo:** padrão `C:\Nexon\Library\maplestorycw`; o app confere se a pasta existe e você pode escolher outra.
    2. **Janela do jogo:** escolha a janela do MapleStory na lista ou "Detectar automaticamente".
@@ -45,12 +45,21 @@ O `.exe` não é assinado; o Windows SmartScreen pode avisar na primeira execuç
 |---|---|
 | `Ctrl+Alt+M` | mostrar / ocultar o widget |
 | `Ctrl+Alt+C` | ligar / desligar o click-through (cliques atravessam o widget) |
+| `Ctrl+Alt+Q` | sair do Maple Widget (o mesmo que o botão ✕ no topo do widget) |
 
-Posição e opacidade do widget são lembradas entre execuções.
+Posição e opacidade do widget são lembradas entre execuções. Se a posição salva ficar fora das telas (ex.: o 2º monitor foi desligado), o widget volta para o canto superior direito da tela principal. Abrir o `.exe` de novo com o widget já aberto não cria um segundo widget: só traz o atual para a frente.
+
+## Sincronização
+
+A aba **Fontes** tem a sincronização automática (ligar/desligar), o ⟳ para sincronizar agora, um campo para links extras (só `https://` do meowdb/niadb) e ✕ para remover um link extra. Com a sincronização **desligada** o app carrega **só os links extras**: os guias do sitemap e o Quest Database deixam de ser carregados.
+
+## Logs
+
+O app grava um registro em `log.txt` na pasta `userData` (veja abaixo), com data e hora em cada linha; o arquivo é aparado no início (fica com o final se passar de 200 KB e recomeça se passar de 1 MB). Contém só mensagens do app e de erro (nada de imagens nem dados de conta). Se algo der errado, envie esse arquivo.
 
 ## Onde ficam os dados
 
-Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPDATA%\maple-widget`): `config.json` (janela, calibração, escala, fontes extras, posição, opacidade), `guias\` (guias e quests para uso offline: um `.json` por fonte, com nome em hash, mais o `auto-index.json` da sincronização automática) e `tessdata\` (`eng.traineddata`, dados do OCR; 5,2 MB medidos, baixados no primeiro início e reaproveitados depois). Versões anteriores guardavam os guias em `cache\`, que no Windows é a mesma pasta `Cache\` do Chromium; no primeiro início desta versão os `.json` de lá são copiados para `guias\` (a pasta antiga não é alterada). Apagar a pasta reinicia o assistente.
+Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPDATA%\maple-widget`): `config.json` (janela, calibração, escala, fontes extras, posição, opacidade), `log.txt` (registro do app), `guias\` (guias e quests para uso offline: um `.json` por fonte, com nome em hash, mais o `auto-index.json` da sincronização automática) e `tessdata\` (cópia de trabalho do `eng.traineddata`, 5,2 MB, feita a partir do modelo que vem no app — nada é baixado). Versões anteriores guardavam os guias em `cache\`, que no Windows é a mesma pasta `Cache\` do Chromium; no primeiro início desta versão os `.json` de lá são copiados para `guias\` (a pasta antiga não é alterada). Apagar a pasta reinicia o assistente.
 
 ## Modos suportados e limites conhecidos
 
@@ -58,13 +67,14 @@ Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPD
 - O OCR foi validado com pixels nativos do HUD em **1366×768** e **1920×1080**. Outras resoluções podem exigir recalibração (a calibração é guardada por resolução).
 - Jogo com escala de DPI do Windows pode ler errado: use "Detectar escala" no assistente ou a opção de compatibilidade de alto DPI do Windows no executável do jogo (sugestão, não testada com o jogo).
 - A janela do jogo é detectada pelo título ou escolhida no assistente.
-- Sem internet, o app usa o cache; a aba Fontes mostra o erro de sincronização.
+- Sem internet, o app usa o cache; a aba Fontes mostra o erro de sincronização. Se o site responder mas a página não tiver dados reconhecíveis (mudança de layout), o cache bom é mantido e a fonte aparece com erro. Se o sitemap mudar de estrutura, o aviso é "O sitemap do site mudou (sem guias reconhecidos); usando guias em cache.".
+- Sem calibração salva para a resolução atual do jogo, o widget avisa "Sem calibração para LxA — usando posições padrão. Fontes → Recalibrar HUD.".
 
 ## Privacidade e segurança
 
 - Não lê memória do jogo, não injeta código, não automatiza entradas.
 - Captura somente a janela escolhida, e a imagem fica só na memória (não é salva nem enviada).
-- Só acessa os domínios meowdb e niadb (lista de permissão); outros links são rejeitados.
+- Acesso à rede: só os guias, quests e ícones do meowdb e do niadb (lista de permissão; outros links são rejeitados). Nada mais: o modelo do OCR vem embutido no app (`resources\tessdata`) e não é baixado.
 - Textos externos são exibidos como texto simples (nunca como HTML).
 
 Checklist de teste manual: [docs/teste-com-o-jogo.md](docs/teste-com-o-jogo.md).
