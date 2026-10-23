@@ -2260,7 +2260,42 @@ git add -A && git commit -m "feat: assistente de primeira execução com calibra
 
 ---
 
-### Task 14: Empacotar e validar nos modos de janela
+### Task 14: Captura nativa (quadros na resolução real da janela do jogo)
+
+Motivação (medida em 2026-10-22 com uma sonda Electron): `desktopCapturer` **reescala toda miniatura de janela para a largura pedida** (janela de 1356×643 → 1920×947; janela de 386×240 → 1567×1080). O shell atual pede 1920×1080 e entrega ao OCR um jogo 1366×768 ampliado 1,4× e borrado, mas o leitor da HUD (Task 3) foi validado em pixels **nativos** (1366×768 e 1920×1080; 9 dos 11 screenshots do jogo do usuário são 1366×768) e devolve `undefined` em escalas que não conhece. Uma segunda sonda mostrou que `navigator.mediaDevices.getDisplayMedia` numa janela oculta, com `session.setDisplayMediaRequestHandler` escolhendo a janela, **funciona sem gesto do usuário** e entrega quadros em **pixels físicos nativos** (janela de 1371×707 DIP → vídeo 1694×836 neste PC com ~125% de escala do Windows). Atenção: a página que chama `getDisplayMedia` precisa ser carregada de **arquivo local (`loadFile`)**; em `data:` o `navigator.mediaDevices` é `undefined`.
+
+**Files:**
+- Create: `src/capture/capturer.html`, `src/capture/capturer.ts` (roda na janela oculta; bundle → `dist/capturer.js`), `src/main/capturer-preload.ts` (bundle → `dist/capturer-preload.js`), `src/capture/scale.ts`, `tests/scale.test.ts`
+- Modify: `build.mjs` (novos bundles + cópia de `capturer.html`), `src/main/main.ts`, `src/main/validate.ts` (+ testes), `src/types.ts` (`Config.escalas: Record<string, number>`), `src/store.ts` (`escalas: {}`), `src/main/preload.ts` + `src/renderer/api.d.ts` (`autoEscala()`), `src/renderer/wizard.ts` (botão "Detectar escala" no passo de calibração), `src/viewmodel.ts` só se precisar de um novo aviso
+
+**Interfaces:**
+- Produces:
+  - `resizeImg(img: Img, scale: number): Img` (`src/capture/scale.ts`): média de área ao reduzir, bilinear ao ampliar, `scale` finito em 0.25–4 (fora disso: cópia sem alterar); `escalasCandidatas: number[]` = `[1, 0.8, 0.75, 0.6667, 0.5, 1.25, 1.5]`.
+  - `validEscala(n: unknown): n is number` (finito, 0.25–4) e `validFrame(msg: unknown): msg is { w: number; h: number; buffer: ArrayBuffer }` (w,h inteiros 1–8192, `buffer.byteLength === w*h*4`) em `validate.ts`.
+  - `Config.escalas: Record<string, number>` — escala de captura **por chave de resolução** `"{w}x{h}"` do quadro bruto (padrão `{}` = 1).
+  - IPC `capture:autoescala` → `Promise<{ ok: boolean; escala?: number; pontos?: number; erro?: string }>`.
+
+**Design (obrigatório):**
+1. **Janela capturadora oculta** (`show: false`, `backgroundThrottling: false`, `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, preload próprio `capturer-preload.js` que expõe **só** `captureApi.frame(msg)`, `captureApi.ended()` e `captureApi.onComando(cb)`); página `capturer.html` carregada com `loadFile`; CSP `default-src 'none'; script-src 'self'`; sem rede. `capturer.ts`: ao receber o comando `iniciar`, chama `navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })`, liga a um `<video>`, e a cada 2 s desenha num `<canvas>` do tamanho **`videoWidth × videoHeight`** e envia `getImageData` (RGBA) via `captureApi.frame({ w, h, buffer })`; se a faixa terminar (`track.onended`) chama `captureApi.ended()`; comando `parar` encerra as faixas.
+2. **Quem pode capturar**: `session.defaultSession.setDisplayMediaRequestHandler((request, callback) => …)` só atende pedidos cuja `request.frame` pertença ao `webContents` da janela capturadora (compare `frame.processId`/`frame.routingId` com os da capturadora); qualquer outro (inclusive o renderer do overlay) recebe `callback({})` (negado). Dentro do handler: `desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } })`, nomes sem o do overlay (`MW Overlay`) e sem o da capturadora, `escolherJanela(nomes, cfg.janelaJogo)` (Task 13) → `callback({ video: fonte })`; sem janela → `callback({})` e flag `jogoNaoEncontrado`.
+3. **Main**: valida cada mensagem com `validFrame` (descarta e loga o que não passar), guarda `ultimoFrame: Img` (convertido para `Img` RGBA) e o instante; `tick` usa o último quadro (mais velho que 5 s ⇒ `jogoNaoEncontrado`), detecta `isBlack`, aplica `resizeImg(frame, cfg.escalas[chave] ?? 1)` antes do OCR; **a chave de regiões é a do quadro bruto** (`${w}x${h}` antes de escalar) — como as regiões são normalizadas 0..1, escalar uniformemente não as altera. Se a faixa terminar ou a janela sumir, reinicia a captura após 3 s (um único timer). O envio do quadro pelo IPC é o custo principal: não enfileirar quadros (só o último importa).
+4. **Wizard**: `getShot()` devolve o último quadro nativo (`fuente: 'vivo'`); sem quadro, cai no screenshot do arquivo como hoje (`fuente: 'arquivo'`).
+5. **Auto-escala**: `capture:autoescala` roda com o `tick` pausado (flag), pega o último quadro, usa as regiões salvas para a chave (ou `DEFAULT_REGIONS`), e para cada escala de `escalasCandidatas` faz `reader.read(resizeImg(frame, s), regiões)`; pontua 2 por `level` e `expAbs` definidos e 1 por `map` e `cls` definidos; escolhe a maior pontuação (empate ⇒ a mais próxima de 1), grava `cfg.escalas[chave]` e devolve `{ ok, escala, pontos }`; sem leitor/quadro devolve `{ ok: false, erro }` em PT-BR. No assistente, o passo de calibração ganha o botão "Detectar escala" que chama isso e mostra o resultado em texto.
+6. **Fallback**: se `getDisplayMedia` falhar (negado/indisponível) registre o erro, mantenha a captura antiga por miniatura (função existente, renomeada `capturarMiniatura`) e acrescente o aviso "Captura nativa indisponível; usando captura por miniatura (a leitura pode falhar em resoluções diferentes de 1920×1080)." via `avisosExtras`.
+7. **Autoteste** (para verificar sem o jogo): com a variável de ambiente `MW_SELFTEST=1` o main abre uma janela extra `MW-SELFTEST` de 800×600 (conteúdo colorido), usa-a como `janelaJogo`, loga **uma vez** `[captura] quadro WxH` do primeiro quadro recebido e encerra o app (`app.exit(0)`); comentário de uma linha explicando que é só para verificação.
+
+- [ ] **Step 1: testes puros que falham** — `tests/scale.test.ts` (`resizeImg`: escala 1 mantém dimensões e conteúdo; 0.5 numa imagem 4×4 devolve 2×2 com a média de cada bloco; 2 numa imagem 2×2 devolve 4×4 com cores intermediárias entre vizinhos (bilinear) e cantos preservados; cor constante é preservada em qualquer escala; escala inválida (NaN, 0, 10) devolve cópia do mesmo tamanho; `escalasCandidatas` contém 1 e só valores 0.25–4) e acréscimos a `tests/validate.test.ts` (`validEscala`, `validFrame`: aceita 2×2 com buffer de 16 bytes; rejeita w/h não inteiros, 0, >8192, buffer de tamanho errado, buffer que não é `ArrayBuffer`, `null`, objetos sem campos). Rode e veja falhar.
+- [ ] **Step 2: implementar** `scale.ts`, `validate.ts` (e `Config.escalas` + `Store.load` com mescla/validação: valores fora de 0.25–4 ou não numéricos são descartados; teste), depois a capturadora (`capturer.html/ts`, `capturer-preload.ts`, `build.mjs`), o handler e o `tick` em `main.ts`, o IPC `capture:autoescala`, o fallback e o autoteste. Rode `npx vitest run` e `npx tsc --noEmit`.
+- [ ] **Step 3: verificação real (obrigatória, sem o jogo)**: `node build.mjs` e rode `MW_SELFTEST=1 npx electron .` (em PowerShell: `$env:MW_SELFTEST='1'; npx electron .`) com timeout de 40 s; o log deve conter `[captura] quadro WxH` com W e H **diferentes de 1920×1080** e coerentes com uma janela de 800×600 DIP (esperado: algo como 800×600 × escala do Windows menos bordas). Anexe a linha ao relatório. Em seguida o smoke normal (`npx electron .`, ~10 s, vivo e sem exceção; encerrar só o PID iniciado; confirmar que não sobrou `electron.exe` do projeto).
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A && git commit -m "feat: captura nativa via getDisplayMedia, escala automatica e fallback por miniatura"
+```
+
+---
+
+### Task 15: Empacotar e validar nos modos de janela
 
 **Files:**
 - Modify: `package.json` (já tem script `dist` e `build`)
@@ -2296,7 +2331,7 @@ git add -A && git commit -m "chore: empacotamento portable e checklist de valida
 
 ## Self-Review (feito contra a spec)
 
-- **Cobertura:** capture/OCR (T2–T3), tracker com confirmação de leituras suspeitas (T4), advisor com dicas por classe e ordenadas por relevância (T5), parser (T6), allowlist/cache/config (T7), descoberta e sincronização automática de guias por sitemap/lastmod (T8), viewmodel e avisos (T9), fonte de quests do Quest Database (T10), janela/captura/IPC/hotkeys/click-through/opacidade/posição/timer de sync (T11), UI compacto/expandido/abas/level up/fontes+sync (T12), assistente 3 passos (T13), empacotamento e validação dos modos e da sync (T14). Erros: cache offline (T7/T8), OCR implausível (T4), captura preta (T9/T11), sem fontes (T9/T12).
+- **Cobertura:** capture/OCR (T2–T3), tracker com confirmação de leituras suspeitas (T4), advisor com dicas por classe e ordenadas por relevância (T5), parser (T6), allowlist/cache/config (T7), descoberta e sincronização automática de guias por sitemap/lastmod (T8), viewmodel e avisos (T9), fonte de quests do Quest Database (T10), janela/captura/IPC/hotkeys/click-through/opacidade/posição/timer de sync (T11), UI compacto/expandido/abas/level up/fontes+sync (T12), assistente 3 passos (T13), captura nativa e auto-escala (T14), empacotamento e validação dos modos e da sync (T15). Erros: cache offline (T7/T8), OCR implausível (T4), captura preta (T9/T11), sem fontes (T9/T12).
 - **Desvios declarados** em *Global Constraints*: ícones sem cache próprio em disco; level up por subida do level lido.
 - **Consistência de tipos:** `Reading`, `Estado`, `ViewModel`, `Library`, `SourceData` definidos na T1 e usados com os mesmos nomes nas demais. `HudReader.read` retorna `Omit<Reading,'t'>` e o main acrescenta `t`.
-- **Riscos abertos (de propósito):** calibração fina das regiões e do predicado de cor do level (T3, passos 5–9); nome da janela do jogo para `desktopCapturer` (regex `/maple/i`, ajustar se o título real for diferente); comportamento em tela cheia exclusiva (T14).
+- **Riscos abertos (de propósito):** calibração fina das regiões e do predicado de cor do level (T3, passos 5–9); nome da janela do jogo para `desktopCapturer` (regex `/maple/i`, ajustar se o título real for diferente); comportamento em tela cheia exclusiva (T15).
