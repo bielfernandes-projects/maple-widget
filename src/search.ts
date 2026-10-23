@@ -1,13 +1,12 @@
 import type { GameDb, GrindMap, Quest } from './types';
 
 export type Resultado = {
-  tipo: 'monstro' | 'mapa' | 'npc' | 'item';
+  tipo: 'monstro' | 'mapa' | 'quest' | 'npc' | 'item';
   titulo: string; sub: string; iconUrl?: string; linhas: string[]; url: string;
 };
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const ORDEM = { monstro: 0, mapa: 1, npc: 2, item: 3 } as const;
-const LINHAS_MAX = 8;
+const ORDEM = { monstro: 0, mapa: 1, quest: 2, npc: 3, item: 4 } as const;
 
 // 0 = não casa; maior = melhor (exato > prefixo > prefixo de palavra > contém > todas as palavras)
 function pontos(nome: string, q: string, tokens: string[]): number {
@@ -18,7 +17,6 @@ function pontos(nome: string, q: string, tokens: string[]): number {
   if (n.includes(q)) return 40;
   return tokens.length > 1 && tokens.every((t) => n.includes(t)) ? 30 : 0;
 }
-const mais = (xs: string[]) => (xs.length > LINHAS_MAX ? [...xs.slice(0, LINHAS_MAX), `… e mais ${xs.length - LINHAS_MAX}`] : xs);
 const fmt = (n: number) => n.toLocaleString('pt-BR');
 
 export function buscar(db: GameDb, quests: Quest[], maps: GrindMap[], consulta: string, limite = 20): Resultado[] {
@@ -41,18 +39,22 @@ export function buscar(db: GameDb, quests: Quest[], maps: GrindMap[], consulta: 
     add(m.name, {
       tipo: 'monstro', titulo: m.name, iconUrl: m.iconUrl, url: m.sourceUrl,
       sub: `Lv ${m.level} · ${fmt(m.exp)} EXP · ${fmt(m.hp)} HP`,
-      linhas: locais.length ? mais(locais) : ['Sem mapas listados.'],
+      linhas: locais.length ? locais : ['Sem mapas listados.'],
     });
+  }
+  for (const x of quests) {
+    add(x.name, { tipo: 'quest', titulo: x.name, iconUrl: x.iconUrl, url: x.sourceUrl, sub: `Lv ${x.level} · ${fmt(x.exp)} EXP`,
+      linhas: [`NPC: ${x.npc}${x.area ? ` (${x.area})` : ''}`, ...(x.reward ? [`Recompensa: ${x.reward}`] : [])] });
   }
   for (const e of db.entradas) {
     if (e.tipo === 'mapa') {
       const mobs = (porMapa.get(e.id) ?? []).sort((a, b) => b.qtd - a.qtd).map((x) => `${x.nome} (Lv ${x.level}) · ${x.qtd}x`);
       const g = maps.find((x) => norm(x.name) === norm(e.nome));
-      const linhas = [...(g ? [`EXP/h máx. do guia: ${fmt(g.maxExpHr)} (${g.mob.name})`] : []), ...mais(mobs)];
+      const linhas = [...(g ? [`EXP/h máx. do guia: ${fmt(g.maxExpHr)} (${g.mob.name})`] : []), ...mobs];
       add(e.nome, { tipo: 'mapa', titulo: e.nome, sub: e.info ?? 'Mapa', linhas: linhas.length ? linhas : ['Sem monstros listados.'], url: e.sourceUrl });
     } else if (e.tipo === 'npc') {
       const qs = quests.filter((x) => norm(x.npc) === norm(e.nome)).map((x) => `${x.name} · Lv ${x.level} · ${fmt(x.exp)} EXP`);
-      add(e.nome, { tipo: 'npc', titulo: e.nome, sub: e.info ? `NPC · ${e.info}` : 'NPC', linhas: qs.length ? mais(qs) : [], url: e.sourceUrl });
+      add(e.nome, { tipo: 'npc', titulo: e.nome, sub: e.info ? `NPC · ${e.info}` : 'NPC', linhas: qs, url: e.sourceUrl });
     } else {
       add(e.nome, { tipo: 'item', titulo: e.nome, sub: 'Item', linhas: [], url: e.sourceUrl });
     }

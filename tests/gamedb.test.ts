@@ -110,6 +110,12 @@ describe('buscar', () => {
     expect(buscar(DB, quests, [], 'alcaster')[0].linhas).toEqual(['Ajudar Alcaster · Lv 30 · 900 EXP']);
     expect(buscar(DB, [], [], 'shell')[0]).toMatchObject({ tipo: 'item', linhas: [], url: 'https://meowdb.com/msclassic/item-db/5' });
   });
+  it('acha quests pelo nome e devolve todas as linhas (sem truncar)', () => {
+    const r = buscar(DB, quests, [], 'ajudar')[0];
+    expect(r).toMatchObject({ tipo: 'quest', sub: 'Lv 30 · 900 EXP', linhas: ['NPC: Alcaster'] });
+    const muitos: GameDb = { monstros: [mon('1', 'Slime', 5, Array.from({ length: 30 }, (_, i) => ({ mapaId: String(i), mapa: 'M' + i, regiao: '', qtd: 30 - i })))], entradas: [] };
+    expect(buscar(muitos, [], [], 'slime')[0].linhas).toHaveLength(30);
+  });
   it('consulta vazia ou sem acerto, e respeita o limite', () => {
     expect(buscar(DB, [], [], '  ')).toEqual([]);
     expect(buscar(DB, [], [], 'zzzz')).toEqual([]);

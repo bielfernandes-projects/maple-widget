@@ -146,17 +146,27 @@ function tabBody(v: ViewModel): Kid[] {
   return fontesTab(v);
 }
 
-const TIPOS = { monstro: 'Monstro', mapa: 'Mapa', npc: 'NPC', item: 'Item' } as const;
+const TIPOS = { monstro: 'Monstro', mapa: 'Mapa', quest: 'Quest', npc: 'NPC', item: 'Item' } as const;
+const abertos = new Set<string>(), verTudo = new Set<string>(); // sobrevivem ao render() (o vm chega a cada 2 s)
+const PREVIA = 8;
 function resRow(r: Resultado) {
-  const det = h('div', { class: 'det' }, ...r.linhas.map((l) => h('div', { class: 'm' }, l)),
-    h('button', { onclick: (ev: Event) => { ev.stopPropagation(); void window.api.openSource(r.url); } }, 'Abrir no meowdb ↗'));
-  det.hidden = true;
-  const row = h('div', { class: 'row res', onclick: () => { det.hidden = !det.hidden; } }, icon(r.iconUrl),
+  const k = r.tipo + '|' + r.url;
+  const det = h('div', { class: 'det' });
+  const pinta = () => {
+    const todos = verTudo.has(k), ls = todos ? r.linhas : r.linhas.slice(0, PREVIA);
+    const mais = r.linhas.length > PREVIA ? h('button', { onclick: (ev: Event) => { ev.stopPropagation(); if (todos) verTudo.delete(k); else verTudo.add(k); pinta(); } },
+        todos ? 'Ver menos ▴' : `Ver mais (+${r.linhas.length - PREVIA}) ▾`) : null;
+    det.replaceChildren(...ls.map((l) => h('div', { class: 'm' }, l)), ...(mais ? [mais] : []),
+      h('button', { onclick: (ev: Event) => { ev.stopPropagation(); void window.api.openSource(r.url); } }, 'Abrir no meowdb ↗'));
+  };
+  pinta();
+  det.hidden = !abertos.has(k);
+  const row = h('div', { class: 'row res', onclick: () => { if (abertos.has(k)) abertos.delete(k); else abertos.add(k); det.hidden = !abertos.has(k); } }, icon(r.iconUrl),
     h('div', { class: 't' }, h('b', null, r.titulo), h('span', { class: 'm' }, `${TIPOS[r.tipo]} · ${r.sub}`)));
   return h('div', null, row, det);
 }
 function buscaTab(): Kid[] {
-  const input = h('input', { type: 'text', class: 'busca', placeholder: 'Buscar mob, mapa, NPC ou item…', maxlength: '100', value: buscaQ });
+  const input = h('input', { type: 'text', class: 'busca', placeholder: 'Buscar mob, mapa, quest, NPC ou item…', maxlength: '100', value: buscaQ });
   const status = h('div', { class: 'm' }, buscaMsg);
   const lista = h('div', null);
   const pinta = () => lista.replaceChildren(...(buscaRes.length ? buscaRes.map(resRow) : [empty(buscaQ.trim() ? 'Nada encontrado.' : 'Digite um nome para buscar.')]));

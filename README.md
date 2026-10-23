@@ -15,8 +15,8 @@ It **only looks at the screen**: it doesn't touch the game, read its memory or i
 
 ## Download & use
 
-1. Open [**Releases**](../../releases/latest) and download **`Maple-Widget-0.1.1-win-x64.zip`**.
-2. Extract it and run **`Maple Widget 0.1.1.exe`**. It's portable: nothing gets installed.
+1. Open [**Releases**](../../releases/latest) and download **`Maple-Widget-0.1.2-win-x64.zip`**.
+2. Extract it and run **`Maple Widget 0.1.2.exe`**. It's portable: nothing gets installed.
 3. **Windows will warn you** ("Windows protected your PC") because the app isn't signed with a paid certificate. Click **More info → Run anyway**. The source code is in this repository so you can check it.
 4. Follow the setup wizard (below).
 
@@ -123,8 +123,8 @@ Ele **só olha a tela**: não mexe no jogo, não lê a memória e não injeta na
 
 ## Baixar e usar
 
-1. Abra a página de [**Releases**](../../releases/latest) e baixe o arquivo **`Maple-Widget-0.1.1-win-x64.zip`**.
-2. Extraia o zip e abra **`Maple Widget 0.1.1.exe`**. É portátil: não instala nada.
+1. Abra a página de [**Releases**](../../releases/latest) e baixe o arquivo **`Maple-Widget-0.1.2-win-x64.zip`**.
+2. Extraia o zip e abra **`Maple Widget 0.1.2.exe`**. É portátil: não instala nada.
 3. **O Windows vai avisar** ("O Windows protegeu o computador"), porque o programa não tem assinatura digital paga. Clique em **Mais informações → Executar assim mesmo**. O código-fonte está neste repositório para você conferir.
 4. Siga o assistente de configuração (abaixo).
 
