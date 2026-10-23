@@ -415,7 +415,10 @@ async function initReader() {
   try {
     // MW_FORCE_OCR_FAIL=1: só para o smoke test da falha de OCR
     if (process.env.MW_FORCE_OCR_FAIL) throw new Error('MW_FORCE_OCR_FAIL');
-    reader = await HudReader.create(path.join(app.getPath('userData'), 'tessdata'));
+    // o tesseract.js só grava o cache do idioma se a pasta já existir (senão baixa de novo a cada início)
+    const td = path.join(app.getPath('userData'), 'tessdata');
+    fs.mkdirSync(td, { recursive: true });
+    reader = await HudReader.create(td);
     leitor = new LeitorComCache(reader);
     ocrErro = '';
     console.log('[ocr] pronto');

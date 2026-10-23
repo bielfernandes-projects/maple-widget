@@ -4,7 +4,7 @@ Rode o `Maple Widget` (portable) com o MapleStory Classic aberto. Em cada item, 
 Na primeira execução é preciso internet (baixa os dados do OCR).
 
 ## Onde ficam os dados
-Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela foi `%APPDATA%\maple-widget\` (minúsculas, com hífen), não "Maple Widget". Lá ficam o `config.json` e, depois da primeira sincronização, `cache\` (e `tessdata\` com os dados do OCR, se o app os gravar; não os vi nas execuções curtas). Para testar do zero, apague a pasta.
+Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela foi `%APPDATA%\maple-widget\` (minúsculas, com hífen), não "Maple Widget". Lá ficam o `config.json`, `tessdata\` (`eng.traineddata`, dados do OCR, gravado no primeiro início) e, depois da primeira sincronização, os `.json` dos guias em `cache\` (no Windows é a mesma pasta `Cache\` do Chromium). Para testar do zero, apague a pasta.
 
 ## 1. Assistente, passos 1 e 2: pasta e janela do jogo
 - **Fazer:** abrir o app pela primeira vez. Passo 1: conferir a pasta (padrão `C:\Nexon\Library\maplestorycw`); tentar uma pasta inexistente. Passo 2: escolher a janela do jogo ou "Detectar automaticamente".
@@ -33,7 +33,7 @@ Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela fo
 
 ## 5. Veredito (verde / amarelo / vermelho)
 - **Fazer:** comparar o EXP/h exibido com o "Max EXP/hr" do melhor mapa para o seu nível.
-- **Esperado:** cor coerente com a regra: verde = seu EXP/h ≥ 70 % do EXP/h máximo do melhor mapa do seu level no guia; amarelo ≥ 40 %; vermelho abaixo de 40 %; cinza = sem dados ou sem leitura. O tooltip da bolinha mostra o \"% do ideal\". O valor do guia é um teto (máximo), não uma média, então não ficar no verde é normal.
+- **Esperado:** cor coerente com a regra: verde = seu EXP/h ≥ 70 % do EXP/h máximo do melhor mapa do seu level no guia; amarelo ≥ 40 %; vermelho abaixo de 40 %; cinza = sem dados ou sem leitura. O tooltip da bolinha mostra o "% do ideal". O valor do guia é um teto (máximo), não uma média, então não ficar no verde é normal.
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 6. Aba Quests
@@ -73,7 +73,7 @@ Pasta `userData` do Electron. Nas execuções do build empacotado que fiz ela fo
 
 ## 13. CPU e RAM
 - **Fazer:** com o jogo rodando, abrir o Gerenciador de Tarefas e somar os processos "Maple Widget" por 2 minutos.
-- **Esperado:** sem engasgos no jogo; anotar CPU média (%) e memória (MB). Para ler: Gerenciador de Tarefas → Detalhes → \"Maple Widget\" e seus processos filhos (são vários); some CPU e memória de todos. Referência (medição de desenvolvimento antes da otimização): ~9,7 % de um núcleo parado e ~40,8 % capturando uma janela de teste (pico de memória 673 MB parado / 824 MB capturando). Uma otimização está planejada; se o seu número for bem maior, anote.
+- **Esperado:** sem engasgos no jogo; anotar CPU média (%) e memória (MB). Para ler: Gerenciador de Tarefas → Detalhes → "Maple Widget" e seus processos filhos (são vários); some CPU e memória de todos. Referência (medição de desenvolvimento com `scripts\perf-probe.ps1`, soma de todos os processos, em % de um núcleo): capturando uma janela de teste por 60 s, 23,6 % antes da otimização e 3,9 % depois (pico de memória 688 → 621 MB); parado, sem a janela do jogo, por 30 s, 6,4 % → 1,8 % (pico 493 → 473 MB). Com o jogo de verdade o OCR pesado (level, classe e mapa) só roda quando esses trechos da HUD mudam e a cada 30 s, então picos curtos ao subir de level ou trocar de mapa são normais. Se o seu número for bem maior, anote.
 - **Resultado:** ☐ ok ☐ falhou — observações:
 
 ## 14. Falha do OCR sem internet

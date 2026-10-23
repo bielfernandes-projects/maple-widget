@@ -12,7 +12,7 @@ Overlay (widget) para Windows que acompanha o seu personagem no **MapleStory Cla
    - **Quests:** lista as quests úteis para o seu nível, com ícone do NPC e ✓ para marcar como feita.
    - **Cartão de level up:** ao subir de nível, mostra dicas de AP/SP (filtradas pela sua classe) e um botão "Abrir guia".
 5. **Veredito** em cores, comparando o seu EXP/h com o "Max EXP/hr" do guia do melhor mapa:
-   verde = seu EXP/h é ≥ 70 % do EXP/h máximo do melhor mapa do seu level no guia, amarelo = ≥ 40 %, vermelho = abaixo de 40 %, cinza = sem dados ou sem leitura. O tooltip da bolinha mostra o \"% do ideal\". O valor do guia é um teto, não uma média.
+   verde = seu EXP/h é ≥ 70 % do EXP/h máximo do melhor mapa do seu level no guia, amarelo = ≥ 40 %, vermelho = abaixo de 40 %, cinza = sem dados ou sem leitura. O tooltip da bolinha mostra o "% do ideal". O valor do guia é um teto, não uma média.
 
 ## Como rodar
 
@@ -50,7 +50,7 @@ Posição e opacidade do widget são lembradas entre execuções.
 
 ## Onde ficam os dados
 
-Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPDATA%\maple-widget`): `config.json` (janela, calibração, escala, fontes extras, posição, opacidade), `cache/` (guias e quests para uso offline) e `tessdata/` (dados do OCR). Apagar a pasta reinicia o assistente.
+Tudo na pasta `userData` do Electron (observado nas execuções de teste: `%APPDATA%\maple-widget`): `config.json` (janela, calibração, escala, fontes extras, posição, opacidade), `cache\` (guias e quests para uso offline, um `.json` por fonte; no Windows é a mesma pasta `Cache\` em que o Chromium guarda o cache dele) e `tessdata\` (`eng.traineddata`, ~5 MB, baixado no primeiro início e reaproveitado depois). Apagar a pasta reinicia o assistente.
 
 ## Modos suportados e limites conhecidos
 
