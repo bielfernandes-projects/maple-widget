@@ -1,6 +1,6 @@
 {
   "name": "maple-widget",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Overlay para Windows que lê a HUD do MapleStory Classic e sugere mapas, quests e dicas dos guias do meowdb.",
   "author": "Gabriel Fernandes",

@@ -202,6 +202,9 @@ function fontesTab(v: ViewModel): Kid[] {
       h('button', { title: 'Remover fonte', 'aria-label': 'Remover fonte', onclick: () => void window.api.removeSource(f.url) }, '✕'))),
     v.fontes.some((f) => !f.auto) ? h('button', { onclick: () => void window.api.refreshSources() }, 'Atualizar links extras') : null,
     h('button', { onclick: () => { wizardDone = false; runWizard(); } }, 'Recalibrar HUD'),
+    h('div', { class: 'row apoio' }, h('div', { class: 't' }, h('b', null, 'Apoiar o projeto ♥'), h('span', { class: 'm' }, 'Gostou? Ajude com uma doação (opcional).')),
+      h('button', { title: 'Abrir o Ko-fi (cartão, PayPal)', onclick: () => void window.api.apoiar('kofi') }, 'Ko-fi'),
+      h('button', { title: 'Copiar a chave Pix', onclick: () => { void window.api.apoiar('pix'); fontesMsg = 'Chave Pix copiada.'; lastKey = ''; render(); } }, 'Pix')),
   ];
 }
 

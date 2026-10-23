@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, screen, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, screen, session, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { HudReader, DEFAULT_REGIONS, avisoSemCalibracao, quadroValeParaRegioes, regioesDoQuadro } from '../capture/hud';
@@ -20,6 +20,9 @@ import type { Estado, GameDb, Img, Library, SourceData, SyncInfo } from '../type
 
 const MAX_JPG = 20 * 1024 * 1024;
 const OVERLAY = 'MW Overlay';
+// apoio ao projeto: valores fixos no app (nunca vêm da rede nem do renderer)
+const KOFI_URL = 'https://ko-fi.com/bielfernandesz';
+const PIX_CHAVE = '03b41bfd-8f32-4c81-aa8c-23a0ac6bacf9'; // chave aleatória
 const CAPTURADOR = 'MW Capturador';
 const TICK_MS = 2000;
 const W_COMPACTO = { w: 340, h: 64 }, W_EXPANDIDO = { w: 340, h: 460 };
@@ -374,6 +377,10 @@ function registerIpc() {
   handle<{ resultados: Resultado[]; monstros: number; sincronizando: boolean }>('search:query', { resultados: [], monstros: 0, sincronizando: false }, (q) => {
     const l = lib();
     return { resultados: validConsulta(q) ? buscar(db, l.quests, l.maps, q) : [], monstros: db.monstros.length, sincronizando: dbSincronizando };
+  });
+  handle<void>('app:apoiar', undefined, async (como) => {
+    if (como === 'kofi') await shell.openExternal(KOFI_URL);
+    else if (como === 'pix') clipboard.writeText(PIX_CHAVE);
   });
   handle<void>('win:opacity', undefined, (n) => {
     if (typeof n !== 'number' || !Number.isFinite(n)) return;
