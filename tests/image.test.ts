@@ -29,3 +29,23 @@ describe('image', () => {
     expect([...i.data]).toEqual([30, 20, 10, 255]);
   });
 });
+
+import { montarImg } from '../src/capture/image';
+describe('montarImg', () => {
+  const rec = (x: number, y: number, w: number, h: number, v: number) => ({ x, y, w, h, data: new Uint8ClampedArray(w * h * 4).fill(v) });
+  it('tamanho do quadro, recortes nas posições e resto zerado', () => {
+    const m = montarImg(6, 4, [rec(1, 1, 2, 2, 9), rec(5, 0, 1, 1, 7)]);
+    expect([m.w, m.h, m.data.length]).toEqual([6, 4, 96]);
+    const px = (x: number, y: number) => m.data[(y * 6 + x) * 4];
+    expect([px(1, 1), px(2, 1), px(1, 2), px(2, 2), px(5, 0)]).toEqual([9, 9, 9, 9, 7]);
+    expect([px(0, 0), px(3, 1), px(1, 3), px(4, 0), px(5, 1)]).toEqual([0, 0, 0, 0, 0]);
+    expect(m.data.reduce((a, b) => a + b, 0)).toBe(16 * 9 + 4 * 7);
+  });
+  it('sem recortes: tudo zerado', () => { expect(montarImg(2, 2, []).data.every((b) => b === 0)).toBe(true); });
+  it('rejeita recorte fora dos limites ou com dados do tamanho errado', () => {
+    expect(() => montarImg(6, 4, [rec(5, 0, 2, 1, 1)])).toThrow();
+    expect(() => montarImg(6, 4, [rec(0, 3, 1, 2, 1)])).toThrow();
+    expect(() => montarImg(6, 4, [rec(-1, 0, 1, 1, 1)])).toThrow();
+    expect(() => montarImg(6, 4, [{ ...rec(0, 0, 2, 2, 1), data: new Uint8ClampedArray(4) }])).toThrow();
+  });
+});

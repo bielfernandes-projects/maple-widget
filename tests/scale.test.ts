@@ -79,3 +79,45 @@ describe('resizeImg cópias e não-quadradas', () => {
     expect([px(b, 0, 0)[0], px(b, 1, 0)[0], px(b, 2, 0)[0]]).toEqual([55, 75, 95]);
   });
 });
+
+import { MARGEM_RECORTE, retanguloComMargem } from '../src/capture/scale';
+import { crop, montarImg } from '../src/capture/image';
+import { DEFAULT_REGIONS } from '../src/capture/hud';
+import type { Region } from '../src/types';
+
+describe('retanguloComMargem', () => {
+  it('cobre a região arredondada para fora, com margem e preso ao quadro', () => {
+    expect(retanguloComMargem(100, 50, { x: 0.105, y: 0.5, w: 0.2, h: 0.1 }, 2)).toEqual({ x: 8, y: 23, w: 25, h: 9 });
+    expect(retanguloComMargem(100, 50, { x: 0, y: 0, w: 1, h: 1 }, 6)).toEqual({ x: 0, y: 0, w: 100, h: 50 });
+    expect(retanguloComMargem(100, 50, { x: 0.99, y: 0.99, w: 0.5, h: 0.5 }, 6)).toEqual({ x: 93, y: 43, w: 7, h: 7 });
+  });
+});
+
+// quadro esparso (só os recortes, resto zerado) reescalado deve dar os mesmos recortes que o quadro inteiro reescalado
+describe('recortes → montarImg → resizeImg = quadro inteiro → resizeImg', () => {
+  let s = 12345;
+  const rnd = () => (s = (Math.imul(s, 1103515245) + 12345) >>> 0) >>> 24;
+  const W = 480, H = 270, full = mk(W, H, () => [rnd(), rnd(), rnd()]);
+  const regioes: Region[] = [...Object.values(DEFAULT_REGIONS), { x: 0.0013, y: 0.4021, w: 0.0517, h: 0.0333 }, { x: 0.9, y: 0.95, w: 0.1, h: 0.05 }];
+  const esparso = (margem: number) => montarImg(W, H, regioes.map((r) => {
+    const q = retanguloComMargem(W, H, r, margem);
+    return { ...q, data: crop(full, { x: q.x / W, y: q.y / H, w: q.w / W, h: q.h / H }).data };
+  }));
+  const maxDiff = (a: Img, b: Img) => { let m = 0; for (let i = 0; i < a.data.length; i++) m = Math.max(m, Math.abs(a.data[i] - b.data[i])); return m; };
+  const pior = (margem: number, escalas: number[]) => {
+    const sp = esparso(margem);
+    let m = 0;
+    for (const e of escalas) {
+      const a = resizeImg(full, e), b = resizeImg(sp, e);
+      for (const r of regioes) m = Math.max(m, maxDiff(crop(a, r), crop(b, r)));
+    }
+    return m;
+  };
+  const ESCALAS = [...escalasCandidatas, 0.25, 0.3, 0.9, 2, 4];
+  it(`com margem de ${MARGEM_RECORTE} px brutos: diferença ≤ 1 em toda escala válida (0,25–4)`, () => {
+    expect(pior(MARGEM_RECORTE, ESCALAS)).toBeLessThanOrEqual(1);
+  });
+  it('sem margem as bordas vazam zeros (por isso a margem existe)', () => {
+    expect(pior(0, [0.5, 0.75, 1.25])).toBeGreaterThan(1);
+  });
+});

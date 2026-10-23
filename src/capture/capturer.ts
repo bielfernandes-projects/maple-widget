@@ -1,8 +1,13 @@
-// Roda na janela capturadora oculta: stream da janela do jogo em pixels nativos → quadros RGBA para o main.
+// Roda na janela capturadora oculta: stream da janela do jogo em pixels nativos → recortes RGBA da HUD para o main.
+// A cada 2 s envia só os recortes das regiões (comando `regioes`); o quadro inteiro só sob demanda (`quadroCompleto`).
+import { MARGEM_RECORTE, retanguloComMargem } from './scale';
+import type { Region } from '../types';
+
+type Comando = 'iniciar' | 'parar' | 'quadroCompleto' | { tipo: 'regioes'; versao: number; regioes: Region[] };
 type CaptureApi = {
-  frame(msg: { w: number; h: number; buffer: ArrayBuffer }): void;
+  frame(msg: object): void;
   ended(erro?: string): void;
-  onComando(cb: (c: string) => void): void;
+  onComando(cb: (c: Comando) => void): void;
 };
 const api = (window as unknown as { captureApi: CaptureApi }).captureApi;
 const FRAME_MS = 2000;
@@ -14,6 +19,9 @@ let timer: number | undefined;
 // geração: cada iniciar/parar invalida o que estava em andamento (iniciar sobreposto não vaza stream/timer)
 let gen = 0;
 const vivos = new Set<MediaStream>();
+let regioes: Region[] = [], versao = 0, pedirCompleto = false;
+// um canvas pequeno por região (não realoca a cada quadro)
+const telas: CanvasRenderingContext2D[] = [];
 // diagnóstico (main lê por executeJavaScript no autoteste): streams com faixa ainda viva
 (window as unknown as { __mwAtivas: () => number }).__mwAtivas = () =>
   [...vivos].filter((s) => s.getVideoTracks().some((t) => t.readyState === 'live')).length;
@@ -30,9 +38,22 @@ function parar() {
 function enviar() {
   const w = v.videoWidth, h = v.videoHeight;
   if (!w || !h) return;
-  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-  ctx.drawImage(v, 0, 0);
-  api.frame({ w, h, buffer: ctx.getImageData(0, 0, w, h).data.buffer });
+  if (pedirCompleto) {
+    pedirCompleto = false;
+    cv.width = w; cv.height = h;
+    ctx.drawImage(v, 0, 0);
+    api.frame({ w, h, buffer: ctx.getImageData(0, 0, w, h).data.buffer });
+    cv.width = cv.height = 1; // solta o buffer do quadro inteiro
+    return;
+  }
+  const recortes = regioes.map((r, i) => {
+    const q = retanguloComMargem(w, h, r, MARGEM_RECORTE);
+    const c = (telas[i] ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true })!);
+    if (c.canvas.width !== q.w || c.canvas.height !== q.h) { c.canvas.width = q.w; c.canvas.height = q.h; }
+    c.drawImage(v, q.x, q.y, q.w, q.h, 0, 0, q.w, q.h);
+    return { ...q, buffer: c.getImageData(0, 0, q.w, q.h).data.buffer };
+  });
+  api.frame({ w, h, versao, recortes });
 }
 
 async function iniciar() {
@@ -56,4 +77,9 @@ async function iniciar() {
   }
 }
 
-api.onComando((c) => { if (c === 'iniciar') void iniciar(); else if (c === 'parar') parar(); });
+api.onComando((c) => {
+  if (c === 'iniciar') void iniciar();
+  else if (c === 'parar') parar();
+  else if (c === 'quadroCompleto') { pedirCompleto = true; if (stream) enviar(); }
+  else if (typeof c === 'object' && c?.tipo === 'regioes' && Array.isArray(c.regioes)) { regioes = c.regioes.slice(0, 4); versao = c.versao; if (stream) enviar(); }
+});

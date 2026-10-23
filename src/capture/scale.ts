@@ -55,3 +55,14 @@ export function resizeImg(img: Img, scale: number): Img {
   }
   return { w: W, h: H, data };
 }
+
+// Margem (px do quadro bruto) de cada recorte enviado pela capturadora. O quadro esparso montado no main passa pelo
+// resizeImg; o pixel de borda de um recorte reescalado lê até ~1/escala px brutos além da região (média de área) ou 1 px
+// (bilinear). 6 px cobrem toda escala válida (0,25–4): ver o teste de equivalência em tests/scale.test.ts.
+export const MARGEM_RECORTE = 6;
+// retângulo inteiro (px) que cobre a região normalizada `r` num quadro w×h, com `margem` px de folga, preso ao quadro
+export function retanguloComMargem(w: number, h: number, r: { x: number; y: number; w: number; h: number }, margem: number) {
+  const x0 = Math.max(0, Math.floor(r.x * w) - margem), y0 = Math.max(0, Math.floor(r.y * h) - margem);
+  const x1 = Math.min(w, Math.ceil((r.x + r.w) * w) + margem), y1 = Math.min(h, Math.ceil((r.y + r.h) * h) + margem);
+  return { x: Math.min(x0, w - 1), y: Math.min(y0, h - 1), w: Math.max(1, x1 - Math.min(x0, w - 1)), h: Math.max(1, y1 - Math.min(y0, h - 1)) };
+}

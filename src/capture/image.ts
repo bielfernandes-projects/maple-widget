@@ -55,3 +55,14 @@ export function isBlack(img: Img): boolean {
   for (let i = 0; i < img.data.length; i += 28) { sum += img.data[i] + img.data[i + 1] + img.data[i + 2]; n += 3; }
   return n > 0 && sum / n < 2;
 }
+
+export type Recorte = { x: number; y: number; w: number; h: number; data: Uint8ClampedArray };
+// quadro w×h zerado com cada recorte copiado na sua posição (o HudReader só lê dentro das regiões)
+export function montarImg(w: number, h: number, recortes: Recorte[]): Img {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (const r of recortes) {
+    if (r.x < 0 || r.y < 0 || r.w < 1 || r.h < 1 || r.x + r.w > w || r.y + r.h > h || r.data.length !== r.w * r.h * 4) throw new RangeError('recorte fora do quadro');
+    for (let y = 0; y < r.h; y++) data.set(r.data.subarray(y * r.w * 4, (y + 1) * r.w * 4), ((r.y + y) * w + r.x) * 4);
+  }
+  return { w, h, data };
+}

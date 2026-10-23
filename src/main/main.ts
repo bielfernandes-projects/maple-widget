@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { HudReader, DEFAULT_REGIONS } from '../capture/hud';
 import { LeitorComCache } from '../capture/cached-reader';
-import { bgraToImg, decodeJpeg, isBlack, toPngBuffer } from '../capture/image';
+import { bgraToImg, decodeJpeg, isBlack, montarImg, toPngBuffer } from '../capture/image';
 import { escalasCandidatas, resizeImg } from '../capture/scale';
 import { escolherJanela } from '../capture/window';
 import { createTracker } from '../tracker';
@@ -14,7 +14,7 @@ import { loadSource } from '../sources/load';
 import { syncAuto } from '../sources/sync';
 import { Store } from '../store';
 import { buildViewModel } from '../viewmodel';
-import { validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validRegions, validResKey } from './validate';
+import { validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validRecortes, validRegions, validResKey } from './validate';
 import type { Estado, Img, Library, SourceData } from '../types';
 
 const MAX_JPG = 20 * 1024 * 1024;
@@ -38,6 +38,8 @@ let syncInfo = { ultima: 0, offline: false };
 let busy = false;
 const SYNC_INTERVALO_MS = 30 * 60_000;
 const QUADRO_VELHO_MS = 5000, REINICIO_MS = 3000;
+// sem janela do jogo: recuo do reinício da captura (cada tentativa custa um getSources de ~0,45 s)
+const RECUOS_MS = [3000, 6000, 12000, 30000];
 const NATIVA_MSG = 'Captura nativa indisponível; usando captura por miniatura (a leitura pode falhar em resoluções diferentes de 1920×1080).';
 // MW_SELFTEST=1: autoteste e sai; =hold: igual, mas não sai (sonda de desempenho). Só fora do pacote.
 const SELFTEST = (process.env.MW_SELFTEST === '1' || process.env.MW_SELFTEST === 'hold') && !app.isPackaged;
@@ -45,7 +47,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // captura nativa (janela oculta + getDisplayMedia): só o último quadro importa, nunca uma fila
 let cap: BrowserWindow | undefined;
-let ultimoFrame: { img: Img; t: number } | null = null;
+// ultimoFrame: quadro montado só com os recortes da HUD (resto zerado); preta = todos os recortes pretos
+let ultimoFrame: { img: Img; t: number; preta: boolean } | null = null;
+// quadro inteiro pedido sob demanda (assistente/autoescala); consumido e solto logo depois
+let ultimoCompleto: { img: Img; t: number } | null = null;
+// regiões enviadas à capturadora (JSON) e sua versão: recortes de outra versão são descartados
+let regioesEnviadas = '', versaoRegioes = 0, recuo = 0;
 let alvo = ''; // janela procurada: cfg.janelaJogo ou a escolha ainda não salva do assistente
 let semJanela = false; // a última tentativa foi negada por falta de janela (não é falha da captura)
 let nativaFalhou = false;
@@ -105,14 +112,37 @@ function escolherFonte<T extends { name: string }>(srcs: T[], janela: string): T
   const nome = escolherJanela(srcs.map((x) => x.name).filter((n) => n !== OVERLAY && n !== CAPTURADOR), janela);
   return nome === undefined ? undefined : srcs.find((x) => x.name === nome);
 }
-const quadroNativo = (): Img | null => (ultimoFrame && Date.now() - ultimoFrame.t <= QUADRO_VELHO_MS ? ultimoFrame.img : null);
-const captureGame = async (): Promise<Img | null> => (nativaFalhou ? capturarMiniatura() : quadroNativo());
-// assistente: quadro da janela `j` (troca o alvo e espera até 5 s pelo primeiro quadro dela)
+const quadroNativo = () => (ultimoFrame && Date.now() - ultimoFrame.t <= QUADRO_VELHO_MS ? ultimoFrame : null);
+async function captureGame(): Promise<{ img: Img; preta: boolean } | null> {
+  if (!nativaFalhou) return quadroNativo();
+  const img = await capturarMiniatura();
+  return img && { img, preta: isBlack(img) };
+}
+const enviarCmd = (c: unknown) => { if (cap && !cap.isDestroyed()) cap.webContents.send('cap:cmd', c); };
+// quadro inteiro da stream atual: pede um e espera até `ms` (null se não vier)
+async function quadroCompleto(ms: number): Promise<Img | null> {
+  const desde = Date.now();
+  setTimeout(() => enviarCmd('quadroCompleto'), 0); // depois de um 'iniciar' já agendado (trocarAlvo), nunca antes
+  for (let i = 0; i < ms / 250 && !(ultimoCompleto && ultimoCompleto.t >= desde); i++) await sleep(250);
+  const q = ultimoCompleto && ultimoCompleto.t >= desde ? ultimoCompleto.img : null;
+  ultimoCompleto = null;
+  return q;
+}
+// assistente: quadro inteiro da janela `j` (troca o alvo e espera até 5 s por ele)
 async function quadroDe(j: string): Promise<{ img: Img | null; nativa: boolean }> {
   if (nativaFalhou) return { img: await capturarMiniatura(j), nativa: false };
   trocarAlvo(j);
-  for (let i = 0; i < 20 && !quadroNativo(); i++) await sleep(250);
-  return { img: quadroNativo(), nativa: true };
+  if (reinicioTimer) reiniciarCaptura(0); // em recuo (sem janela): tenta já, sem esperar até 30 s
+  return { img: await quadroCompleto(5000), nativa: true };
+}
+// regiões do quadro w×h (normalizadas; a escala é uniforme e aplicada no main depois de montar)
+function conferirRegioes(w: number, h: number): boolean {
+  const js = JSON.stringify(cfg.regions[`${w}x${h}`] ?? DEFAULT_REGIONS);
+  if (js === regioesEnviadas) return true;
+  regioesEnviadas = js; versaoRegioes++;
+  const r = JSON.parse(js) as typeof DEFAULT_REGIONS;
+  enviarCmd({ tipo: 'regioes', versao: versaoRegioes, regioes: [r.level, r.exp, r.cls, r.map] });
+  return false;
 }
 
 function blindar(wc: WebContents) {
@@ -121,12 +151,12 @@ function blindar(wc: WebContents) {
   wc.on('will-frame-navigate', (e) => e.preventDefault());
   wc.on('will-attach-webview', (e) => e.preventDefault());
 }
-function iniciarCaptura() { semJanela = false; if (cap && !cap.isDestroyed()) cap.webContents.send('cap:cmd', 'iniciar'); }
+function iniciarCaptura() { semJanela = false; enviarCmd('iniciar'); }
 function reiniciarCaptura(ms = REINICIO_MS) {
   clearTimeout(reinicioTimer);
   reinicioTimer = setTimeout(() => { reinicioTimer = undefined; iniciarCaptura(); }, ms);
 }
-function trocarAlvo(j: string) { if (j !== alvo) { alvo = j; ultimoFrame = null; reiniciarCaptura(0); } }
+function trocarAlvo(j: string) { if (j !== alvo) { alvo = j; ultimoFrame = null; recuo = 0; reiniciarCaptura(0); } }
 
 const CAP_FILE = () => path.join(__dirname, 'capturer.html');
 const daCapturadora = (wc: WebContents) => !!cap && !cap.isDestroyed() && wc === cap.webContents;
@@ -137,7 +167,7 @@ function criarCapturadora() {
     show: false, title: CAPTURADOR,
     webPreferences: { preload: path.join(__dirname, 'capturer-preload.js'), additionalArguments: ['--mw-capturador'], contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, backgroundThrottling: false },
   });
-  cap = w;
+  cap = w; regioesEnviadas = ''; // capturadora nova não tem regiões
   blindar(w.webContents);
   w.webContents.on('render-process-gone', (_e, d) => capturadoraCaiu(w, d.reason));
   w.on('unresponsive', () => capturadoraCaiu(w, 'unresponsive'));
@@ -178,9 +208,16 @@ function registrarCaptura() {
   });
   ipcMain.on('cap:frame', (e, msg) => {
     if (!daCapturadora(e.sender)) return;
-    if (!validFrame(msg)) { console.warn('[captura] quadro inválido descartado'); return; }
-    ultimoFrame = { img: { w: msg.w, h: msg.h, data: new Uint8ClampedArray(msg.buffer) }, t: Date.now() };
-    nativaFalhou = false; quadros++;
+    if (validFrame(msg)) {
+      ultimoCompleto = { img: { w: msg.w, h: msg.h, data: new Uint8ClampedArray(msg.buffer) }, t: Date.now() };
+    } else if (validRecortes(msg)) {
+      // recortes com regiões de outra chave/versão (corrida com uma troca de regiões) são descartados
+      if (conferirRegioes(msg.w, msg.h) && msg.versao === versaoRegioes) {
+        const rs = msg.recortes.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h, data: new Uint8ClampedArray(r.buffer) }));
+        ultimoFrame = { img: montarImg(msg.w, msg.h, rs), t: Date.now(), preta: rs.length > 0 && rs.every(isBlack) };
+      }
+    } else { console.warn('[captura] quadro inválido descartado'); return; }
+    nativaFalhou = false; quadros++; recuo = 0;
     if (!logouQuadro) {
       logouQuadro = true; console.log(`[captura] quadro ${msg.w}x${msg.h}`);
       if (SELFTEST) void autoteste();
@@ -192,16 +229,19 @@ function registrarCaptura() {
       if (!nativaFalhou) console.error('[captura] getDisplayMedia falhou:', erro.slice(0, 200));
       nativaFalhou = true;
     }
-    reiniciarCaptura();
+    reiniciarCaptura(semJanela ? RECUOS_MS[Math.min(recuo++, RECUOS_MS.length - 1)] : REINICIO_MS);
   });
 }
-// autoteste: dois `iniciar` sobrepostos devem deixar UMA stream ativa e quadros a cada ~2 s (sem duplicados)
+// autoteste: dois `iniciar` sobrepostos devem deixar UMA stream ativa e quadros a cada ~2 s (sem duplicados);
+// depois confere que chegam recortes e que o quadro completo sob demanda funciona
 async function autoteste() {
   iniciarCaptura(); iniciarCaptura();
   quadros = 0;
   await sleep(7000);
   const ativas = cap && !cap.isDestroyed() ? await cap.webContents.executeJavaScript('window.__mwAtivas()') : -1;
   console.log(`[captura] autoteste: streams ativas ${ativas}, quadros em 7 s ${quadros}`);
+  const q = quadroNativo(), c = await quadroCompleto(3000);
+  console.log(`[captura] autoteste: recortes ${q ? "ok" : "nenhum"}, quadro completo ${c ? c.w + "x" + c.h : "nenhum"}`);
   if (process.env.MW_SELFTEST === 'hold') return;
   saindo = true; // app.exit não emite before-quit: sem isso o 'closed' recriaria a capturadora
   app.exit(0);
@@ -212,12 +252,13 @@ async function tick() {
   if (busy) return;
   busy = true;
   try {
-    const img = await captureGame();
+    const q = await captureGame(), img = q?.img;
     flags = { capturaPreta: false, jogoNaoEncontrado: !img };
-    if (img) {
-      if (isBlack(img)) flags.capturaPreta = true;
+    if (q && img) {
+      if (q.preta) flags.capturaPreta = true;
       else if (leitor) {
-        // chave = quadro bruto; regiões normalizadas não mudam com escala uniforme
+        // chave = quadro bruto; regiões normalizadas não mudam com escala uniforme.
+        // ponytail: resizeImg percorre o quadro esparso inteiro (só quando há escala ≠ 1); reescalar só os recortes se pesar
         const key = resKey(img), esc = cfg.escalas[key];
         const r = await leitor.read(esc ? resizeImg(img, esc) : img, cfg.regions[key] ?? DEFAULT_REGIONS);
         estado = tracker.push({ ...r, t: Date.now() });
@@ -333,7 +374,7 @@ function registerIpc() {
     while (busy) await sleep(50);
     busy = true;
     try {
-      const frame = quadroNativo();
+      const frame = quadroNativo() ? await quadroCompleto(3000) : null;
       if (!frame) return { ok: false, erro: 'Sem imagem ao vivo do jogo. Abra o jogo (janela/borderless) e tente de novo.' };
       if (isBlack(frame)) return { ok: false, erro: 'Quadro preto: o jogo parece estar em tela cheia exclusiva ou ainda carregando.' };
       const key = resKey(frame), regions = cfg.regions[key] ?? DEFAULT_REGIONS;

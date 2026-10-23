@@ -117,3 +117,32 @@ describe('validFrame área', () => {
     expect(validFrame(f(5000, 4000))).toBe(false);
   });
 });
+
+import { validRecortes } from '../src/main/validate';
+describe('validRecortes', () => {
+  const c = (x: number, y: number, w: number, h: number, bytes = w * h * 4) => ({ x, y, w, h, buffer: new ArrayBuffer(bytes) });
+  const m = (recortes: unknown, extra: Record<string, unknown> = {}) => ({ w: 100, h: 50, versao: 1, recortes, ...extra });
+  it('aceita até 4 recortes dentro do quadro (e lista vazia)', () => {
+    expect(validRecortes(m([c(0, 0, 10, 5), c(90, 45, 10, 5), c(1, 1, 1, 1), c(50, 20, 3, 3)]))).toBe(true);
+    expect(validRecortes(m([]))).toBe(true);
+  });
+  it('rejeita mais de 4', () => { expect(validRecortes(m([c(0, 0, 1, 1), c(0, 0, 1, 1), c(0, 0, 1, 1), c(0, 0, 1, 1), c(0, 0, 1, 1)]))).toBe(false); });
+  it('rejeita dimensões não inteiras/zero/negativas e posição inválida', () => {
+    for (const r of [c(0, 0, 1.5, 2, 12), c(0, 0, 0, 2, 0), c(0, 0, -1, 2, 0), c(-1, 0, 1, 1), c(0.5, 0, 1, 1), c(NaN, 0, 1, 1)]) expect(validRecortes(m([r]))).toBe(false);
+  });
+  it('rejeita buffer com tamanho errado ou que não é ArrayBuffer', () => {
+    expect(validRecortes(m([c(0, 0, 2, 2, 15)]))).toBe(false);
+    expect(validRecortes(m([{ x: 0, y: 0, w: 1, h: 1, buffer: new Uint8Array(4) }]))).toBe(false);
+  });
+  it('rejeita recorte fora do quadro', () => {
+    expect(validRecortes(m([c(95, 0, 6, 1)]))).toBe(false);
+    expect(validRecortes(m([c(0, 49, 1, 2)]))).toBe(false);
+  });
+  it('rejeita área total maior que o quadro', () => {
+    expect(validRecortes(m([c(0, 0, 100, 50), c(0, 0, 1, 1)]))).toBe(false);
+    expect(validRecortes(m([c(0, 0, 100, 50)]))).toBe(true);
+  });
+  it('rejeita quadro inválido, versão inválida e formatos errados', () => {
+    for (const x of [null, 1, 'x', {}, m('a'), m({}), m([null]), m([], { w: 0 }), m([], { w: 5000, h: 5000 }), m([], { versao: -1 }), m([], { versao: 1.5 }), m([], { versao: '1' })]) expect(validRecortes(x)).toBe(false);
+  });
+});

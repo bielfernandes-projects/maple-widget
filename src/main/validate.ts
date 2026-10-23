@@ -41,3 +41,21 @@ export function validFrame(msg: unknown): msg is { w: number; h: number; buffer:
   if (!isObj(msg) || !dimOk(msg.w) || !dimOk(msg.h) || msg.w * msg.h > 16_777_216) return false; // área ≤ 4096×4096
   return msg.buffer instanceof ArrayBuffer && msg.buffer.byteLength === msg.w * msg.h * 4;
 }
+
+const MAX_RECORTES = 4;
+const intOk = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0;
+export type MsgRecortes = { w: number; h: number; versao: number; recortes: { x: number; y: number; w: number; h: number; buffer: ArrayBuffer }[] };
+// recortes da HUD vindos da capturadora: ≤ 4, inteiros, dentro do quadro, buffer exato, área total ≤ a do quadro
+export function validRecortes(msg: unknown): msg is MsgRecortes {
+  if (!isObj(msg) || !dimOk(msg.w) || !dimOk(msg.h) || msg.w * msg.h > 16_777_216 || !intOk(msg.versao)) return false;
+  const { w, h, recortes } = msg as { w: number; h: number; recortes: unknown };
+  if (!Array.isArray(recortes) || recortes.length > MAX_RECORTES) return false;
+  let area = 0;
+  for (const r of recortes) {
+    if (!isObj(r) || !intOk(r.x) || !intOk(r.y) || !dimOk(r.w) || !dimOk(r.h)) return false;
+    if (r.x + r.w > w || r.y + r.h > h) return false;
+    if (!(r.buffer instanceof ArrayBuffer) || r.buffer.byteLength !== r.w * r.h * 4) return false;
+    area += r.w * r.h;
+  }
+  return area <= w * h;
+}
