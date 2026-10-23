@@ -33,6 +33,7 @@ let cfg: ReturnType<Store['load']>;
 let reader: HudReader | undefined;
 let leitor: LeitorComCache | undefined; // tick: OCR pesado só quando o recorte muda
 let ocrErro = '';
+const OCR_INIT_MS = 60_000;
 const OCR_MSG = 'Leitura da tela indisponível (falha ao preparar o OCR). Tentando de novo a cada 30 s…';
 let data: SourceData[] = [];
 let db: GameDb = { monstros: [], entradas: [] };
@@ -481,7 +482,11 @@ async function initReader() {
     fs.mkdirSync(td, { recursive: true });
     const emb = tessdataEmbutido();
     if (!emb) console.warn('[ocr] modelo embutido não encontrado; baixando da CDN do tesseract.js');
-    const r = await HudReader.create(td, undefined, emb);
+    // o tesseract.js engole erros do worker e a criação pode nunca terminar: limite de 60 s, e o worker tardio é descartado
+    const criar = HudReader.create(td, undefined, emb);
+    let t: NodeJS.Timeout | undefined;
+    const limite = new Promise<never>((_, rej) => { t = setTimeout(() => rej(new Error('OCR não iniciou em 60 s')), OCR_INIT_MS); });
+    const r = await Promise.race([criar, limite]).catch((e) => { criar.then((w) => void w.close(), () => {}); throw e; }).finally(() => clearTimeout(t));
     if (reader) { void r.close(); return; } // outra inicialização já venceu: descarta o worker extra
     reader = r;
     leitor = new LeitorComCache(reader);
