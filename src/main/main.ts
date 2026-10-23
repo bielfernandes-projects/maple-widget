@@ -133,7 +133,7 @@ let saindo = false, ultimaQueda = 0, quadros = 0;
 function criarCapturadora() {
   const w = new BrowserWindow({
     show: false, title: CAPTURADOR,
-    webPreferences: { preload: path.join(__dirname, 'capturer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, backgroundThrottling: false },
+    webPreferences: { preload: path.join(__dirname, 'capturer-preload.js'), additionalArguments: ['--mw-capturador'], contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false, backgroundThrottling: false },
   });
   cap = w;
   blindar(w.webContents);
@@ -229,7 +229,7 @@ function createWindow() {
   win = new BrowserWindow({
     title: OVERLAY, width: W_COMPACTO.w, height: W_COMPACTO.h, x: cfg.janela.x, y: cfg.janela.y,
     frame: false, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), additionalArguments: ['--mw-overlay'], contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
   });
   blindar(win.webContents);
   win.setAlwaysOnTop(true, 'screen-saver');
