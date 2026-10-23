@@ -10,6 +10,7 @@ export interface Api {
   toggleQuest(id: string): Promise<void>;
   setExpanded(b: boolean): Promise<void>;
   setCalibSize(): Promise<void>;
+  setSize(w: number, h: number): Promise<void>;
   setOpacity(n: number): Promise<void>;
   pickGameFolder(): Promise<string | null>;
   getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo'; nativa: boolean } | null>;

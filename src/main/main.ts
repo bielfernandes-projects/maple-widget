@@ -1,7 +1,6 @@
 import { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, screen, session, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { HudReader, DEFAULT_REGIONS, avisoSemCalibracao, quadroValeParaRegioes, regioesDoQuadro } from '../capture/hud';
 import { LeitorComCache } from '../capture/cached-reader';
 import { bgraToImg, decodeJpeg, isBlack, montarImg, toPngBuffer } from '../capture/image';
@@ -198,13 +197,12 @@ function capturadoraCaiu(w: BrowserWindow, motivo: string) {
 
 // registrado uma vez; vale para a capturadora atual (inclusive recriada)
 function registrarCaptura() {
-  const fileUrl = pathToFileURL(CAP_FILE()).href;
   // só a janela capturadora recebe stream; qualquer outro pedido (inclusive o overlay) é negado
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     let chamado = false;
     const responder = (s: Parameters<typeof callback>[0]) => { if (chamado) return; chamado = true; callback(s); };
     const f = request.frame, m = cap && !cap.isDestroyed() ? cap.webContents.mainFrame : null;
-    if (!f || !m || f.processId !== m.processId || f.routingId !== m.routingId || f.url !== fileUrl) {
+    if (!f || !m || f.processId !== m.processId || f.routingId !== m.routingId || f.url !== m.url) {
       console.warn('[captura] pedido de tela negado:', f?.url);
       responder(null); return; // null = negar (callback({}) lança no Electron 45)
     }
@@ -286,7 +284,7 @@ function createWindow() {
   const pos = posicaoVisivel({ x: cfg.janela.x, y: cfg.janela.y }, W_COMPACTO, screen.getAllDisplays().map(tela), tela(screen.getPrimaryDisplay()));
   win = new BrowserWindow({
     title: OVERLAY, width: W_COMPACTO.w, height: W_COMPACTO.h, x: pos.x, y: pos.y,
-    frame: false, transparent: true, resizable: false, skipTaskbar: true, hasShadow: false,
+    frame: false, transparent: true, resizable: true, maximizable: false, fullscreenable: false, skipTaskbar: true, hasShadow: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), additionalArguments: ['--mw-overlay'], contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: false },
   });
   blindar(win.webContents);
@@ -353,6 +351,12 @@ function registerIpc() {
     const a = screen.getDisplayMatching(win.getBounds()).workArea;
     const w = Math.min(1000, a.width - 20), h = Math.min(780, a.height - 20);
     win.setBounds({ x: a.x + Math.round((a.width - w) / 2), y: a.y + Math.round((a.height - h) / 2), width: w, height: h });
+  });
+  // redimensionar pelo canto (janela transparente sem moldura não tem borda arrastável no Windows)
+  handle<void>('win:size', undefined, (w, h) => {
+    if (typeof w !== 'number' || typeof h !== 'number' || !Number.isFinite(w) || !Number.isFinite(h)) return;
+    const a = screen.getDisplayMatching(win.getBounds()).workArea;
+    win.setSize(Math.round(Math.min(a.width, Math.max(300, w))), Math.round(Math.min(a.height, Math.max(120, h))));
   });
   handle<void>('win:opacity', undefined, (n) => {
     if (typeof n !== 'number' || !Number.isFinite(n)) return;

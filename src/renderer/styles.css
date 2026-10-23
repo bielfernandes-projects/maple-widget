@@ -35,3 +35,4 @@ input[type=text] { width: 100%; background: #0e1017; color: var(--fg); border: 1
 .wlist button { text-align: left; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wlist button.on { border-color: var(--acc); color: var(--acc); background: #3a2f10; }
 .wlist button.on::before { content: "✓ "; }
+#grip { position: fixed; right: 2px; bottom: 2px; width: 16px; height: 16px; cursor: nwse-resize; -webkit-app-region: no-drag; z-index: 9; background: linear-gradient(135deg, transparent 55%, var(--mut) 55%, var(--mut) 65%, transparent 65%, transparent 78%, var(--mut) 78%, var(--mut) 88%, transparent 88%); }

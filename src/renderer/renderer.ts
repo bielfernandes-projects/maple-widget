@@ -182,3 +182,12 @@ function footer(v: ViewModel) {
   return h('div', { class: 'foot nodrag' }, h('label', { class: 'opac' }, 'Opacidade ', r),
     h('span', { class: 'keys' }, 'Ctrl+Alt+M oculta · Ctrl+Alt+C click-through · Ctrl+Alt+Q sai'));
 }
+
+// canto de redimensionar: arrasta e pede o novo tamanho ao main
+{
+  const g = document.getElementById('grip')!;
+  let ini: { x: number; y: number; w: number; h: number } | null = null;
+  g.addEventListener('pointerdown', (e) => { g.setPointerCapture(e.pointerId); ini = { x: e.screenX, y: e.screenY, w: window.outerWidth, h: window.outerHeight }; });
+  g.addEventListener('pointermove', (e) => { if (ini) void window.api.setSize(ini.w + e.screenX - ini.x, ini.h + e.screenY - ini.y); });
+  g.addEventListener('pointerup', () => { ini = null; });
+}
