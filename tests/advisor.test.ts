@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeExpToNext, mapasParaLevel, questsParaLevel, dicasPara, novidadesNoLevel, veredito } from '../src/advisor';
+import { mapasNaFaixa, mapasProximos, makeExpToNext, mapasParaLevel, questsParaLevel, dicasPara, novidadesNoLevel, veredito } from '../src/advisor';
 import type { GrindMap, Quest, Tip } from '../src/types';
 
 const M = (name: string, a: number, b: number, exp: number): GrindMap =>
@@ -155,5 +155,23 @@ describe('linhagem de classe com títulos reais dos guias', () => {
   it('classe desconhecida: só genéricos; nunca lança', () => {
     expect(new Set(passa('Beginner'))).toEqual(new Set(genericos));
     for (const c of ['(', 'constructor', '__proto__', 'hasOwnProperty', 'a\\b']) expect(Array.isArray(passa(c))).toBe(true);
+  });
+});
+
+describe('mapasNaFaixa / mapasProximos', () => {
+  const maps = [M('A', 15, 20, 100), M('B', 15, 20, 300), M('C', 10, 20, 200), M('D', 15, 20, 50), M('E', 21, 25, 400), M('F', 19, 25, 90), M('G', 30, 40, 999)];
+  it('lista TODOS os mapas que cobrem o level (faixa inclusiva nas duas pontas), do melhor EXP/h ao pior', () => {
+    expect(mapasNaFaixa(maps, 18).map((m) => m.name)).toEqual(['B', 'C', 'A', 'D']);
+    expect(mapasNaFaixa(maps, 15).map((m) => m.name)).toEqual(['B', 'C', 'A', 'D']);
+    expect(mapasNaFaixa(maps, 20).map((m) => m.name)).toEqual(['B', 'C', 'A', 'F', 'D']);
+    expect(mapasParaLevel(maps, 18)).toHaveLength(3); // o resumo da aba Agora continua com 3
+  });
+  it('próximos: começam até +3 acima e ainda não estão na faixa', () => {
+    expect(mapasProximos(maps, 18).map((m) => m.name)).toEqual(['F', 'E']); // por início da faixa; G está longe
+    expect(mapasProximos(maps, 18, 12).map((m) => m.name)).toEqual(['F', 'E', 'G']);
+  });
+  it('mesmo mapa em dois guias aparece uma vez, com o maior EXP/h', () => {
+    const dup = [M('A', 15, 20, 100), { ...M('A', 15, 20, 250), sourceUrl: 'outro' }];
+    expect(mapasNaFaixa(dup, 18).map((m) => m.maxExpHr)).toEqual([250]);
   });
 });

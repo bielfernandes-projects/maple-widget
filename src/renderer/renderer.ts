@@ -73,7 +73,7 @@ function render() {
   const scroll = app.querySelector('.body')?.scrollTop ?? 0;
   const e = vm.estado;
   const head = h('div', { class: 'head drag' },
-    h('span', { class: 'lv' }, e ? `Lv ${e.level}${e.classe ? ' ' + e.classe : ''}` : 'Aguardando jogo…'),
+    h('span', { class: 'lv' }, e ? `Lv ${e.level}${e.classe ? ' ' + e.classe : ''}` : vm.espera),
     h('div', { class: 'bar' }, (() => { const i = h('i', null); i.style.width = `${Math.min(100, e?.expPct ?? 0)}%`; return i; })()),
     h('span', { class: 'rate' }, e ? `${(e.expPct).toFixed(2)}% · ${fmt(e.expPorHora)}/h` : ''),
     h('span', { class: `dot ${vm.veredito.cor}`, title: vm.veredito.pct === null ? 'sem dados' : `${Math.round(vm.veredito.pct * 100)}% do ideal. ${TETO}` }),
@@ -141,7 +141,15 @@ function tabBody(v: ViewModel): Kid[] {
     ];
   }
   if (tab === 'quests') return v.quests.length ? v.quests.map(questRow) : [v.fontes.length ? empty('Nenhuma quest para este level nas fontes.') : emptyAdd('Nenhuma fonte carregada.')];
-  if (tab === 'mapas') return v.mapas.length ? v.mapas.map((m) => h('div', null, mapRow(m), h('div', { class: 'm' }, m.why))) : [v.fontes.length ? empty('Nenhum mapa para este level nas fontes.') : emptyAdd('Nenhuma fonte carregada.')];
+  if (tab === 'mapas') {
+    if (!v.mapasFaixa.length && !v.mapasProximos.length) return [v.fontes.length ? empty('Nenhum mapa para este level nas fontes.') : emptyAdd('Nenhuma fonte carregada.')];
+    const lin = (m: GrindMap) => h('div', null, mapRow(m), h('div', { class: 'm faixa' }, `Lv ${m.levelMin}–${m.levelMax}${m.why ? ' · ' + m.why : ''}`));
+    return [
+      h('b', null, `No seu level (${v.mapasFaixa.length})`),
+      ...(v.mapasFaixa.length ? v.mapasFaixa.map(lin) : [empty('Nenhum mapa cobre este level.')]),
+      ...(v.mapasProximos.length ? [h('b', { class: 'sec' }, `Em breve (até Lv +3) · ${v.mapasProximos.length}`), ...v.mapasProximos.map(lin)] : []),
+    ];
+  }
   if (tab === 'buscar') return buscaTab();
   return fontesTab(v);
 }

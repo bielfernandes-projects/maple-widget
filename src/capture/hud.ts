@@ -115,8 +115,28 @@ export function digitBits(img: Img, fg = FG_DIGIT): number[][][] {
   const bs = glyphBoxes(img, fg);
   return bs.filter(tall(bs)).map((b) => bitsOf(img, b, fg));
 }
-export function matchDigits(img: Img, templates: Templates, fg = FG_DIGIT): number | undefined {
-  const bits = digitBits(img, fg);
+// Recortes largos pegam a borda/preenchimento claro da barra de EXP (linhas quase inteiras de "tinta"): tira essas faixas do topo e da base
+const amarelo = (r: number, g: number, b: number) => g - b > 35 && g > 110;
+export function aparaFaixas(img: Img, frac = 0.6): Img {
+  const solida = (y: number) => {
+    let n = 0;
+    for (let x = 0; x < img.w; x++) { const i = (y * img.w + x) * 4; if (FG_DIGIT(img.data[i], img.data[i + 1], img.data[i + 2]) || amarelo(img.data[i], img.data[i + 1], img.data[i + 2])) n++; }
+    return n >= img.w * frac;
+  };
+  let a = 0, b = img.h;
+  while (a < b && solida(a)) a++;
+  while (b > a && solida(b - 1)) b--;
+  if (a === 0 && b === img.h) return img;
+  return b - a < 3 ? img : { w: img.w, h: b - a, data: img.data.slice(a * img.w * 4, b * img.w * 4) };
+}
+// glifo colado na borda esquerda do recorte está cortado (ex.: o fim do rótulo "EXP"): não é dígito
+export function digitBitsSemBorda(img: Img, fg = FG_DIGIT): number[][][] {
+  let bs = glyphBoxes(img, fg).filter(tall(glyphBoxes(img, fg)));
+  if (bs.length >= 2 && bs[0].x0 === 0) bs = bs.slice(1);
+  return bs.map((b) => bitsOf(img, b, fg));
+}
+export function matchDigits(img: Img, templates: Templates, fg = FG_DIGIT, soltaBorda = false): number | undefined {
+  const bits = soltaBorda ? digitBitsSemBorda(img, fg) : digitBits(img, fg);
   if (!bits.length) return undefined;
   const s = bits.map((b) => matchGlyph(b, templates));
   return s.includes(undefined) ? undefined : parseInt(s.join(''), 10);
@@ -166,10 +186,11 @@ export function expSamples(img: Img, expAbs: number, expPct: number): [string, n
   if (!p || got.length !== want.length || p.int.length !== intS.length) return undefined;
   return got.map((bits, i) => [want[i], bits]);
 }
-export function readExpDigits(img: Img, templates: Templates): { expAbs: number; expPct: number } | undefined {
+export function readExpDigits(bruto: Img, templates: Templates): { expAbs: number; expPct: number } | undefined {
+  const img = aparaFaixas(bruto);
   const b = bracketCol(img);
   if (b < 3) return undefined;
-  const expAbs = matchDigits(cols(img, 0, b - 2), templates);
+  const expAbs = matchDigits(cols(img, 0, b - 2), templates, FG_DIGIT, true);
   const p = pctBits(cols(img, afterBracket(img, b), img.w));
   if (expAbs === undefined || !p) return undefined;
   const d = [...p.int, ...p.frac].map((g) => matchGlyph(g, templates));
@@ -230,9 +251,12 @@ const textKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "").replace
 const fixRoman = (s?: string) => s?.split(" ").map((w) => (/^[Il|1]+$/.test(w) ? "I".repeat(w.length) : w)).join(" ").replace(/[^A-Za-z0-9]+$/, "");
 
 const SUPPORTED_WIDTHS = [1366, 1920];
+export const larguraSuportada = (w: number) => SUPPORTED_WIDTHS.some((s) => Math.abs(w - s) <= s * 0.03);
 export type Campo = keyof Regions;
 const TODOS: ReadonlySet<Campo> = new Set(['level', 'exp', 'cls', 'map']);
 export class HudReader {
+  // true: lê o mapa em qualquer largura (quem chama é responsável por validar o texto, ex.: casando com nomes conhecidos)
+  mapaEmQualquerLargura = false;
   private constructor(private w: Worker, private templates: Templates) {}
   // langPath: pasta local com eng.traineddata (sem gzip) — sem rede; ausente = baixa da CDN do tesseract.js
   static async create(cachePath?: string, templates: Templates = digitTemplates, langPath?: string) {
@@ -271,7 +295,7 @@ export class HudReader {
     const exp = campos.has('exp') ? await safe(() => readExpDigits(crop(img, r.exp), this.templates)) : undefined;
     const cls = campos.has('cls') ? await safe(() => this.cls(crop(img, r.cls))) : undefined;
     // o nome do mapa tem erro SISTEMATICO (ex. rn->m) fora das resolucoes testadas, que votacao nao detecta: so se confia nelas
-    const map = campos.has('map') && SUPPORTED_WIDTHS.some((w) => Math.abs(img.w - w) <= w * 0.03) ? await safe(() => this.map(crop(img, r.map))) : undefined;
+    const map = campos.has('map') && (this.mapaEmQualquerLargura || larguraSuportada(img.w)) ? await safe(() => this.map(crop(img, r.map))) : undefined;
     return { level, expAbs: exp?.expAbs, expPct: exp?.expPct, cls, map };
   }
   close() { return this.w.terminate().then(() => undefined); }

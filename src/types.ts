@@ -68,7 +68,10 @@ export type SyncInfo = { auto: boolean; guias: number; ultima: number; offline: 
 export type ViewModel = {
   estado: Estado | null;
   veredito: Veredito;
-  mapas: GrindMap[];
+  mapas: GrindMap[]; // os 3 melhores do level (aba Agora)
+  mapasFaixa: GrindMap[]; // todos os que cobrem o level
+  mapasProximos: GrindMap[]; // começam até +3 levels acima
+  espera: string; // texto do cabeçalho quando não há leitura
   quests: Quest[];
   dicas: Tip[];
   levelUp?: { de: number; para: number; dicas: Tip[]; novidades: { maps: GrindMap[]; quests: Quest[] } };

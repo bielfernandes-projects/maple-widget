@@ -46,3 +46,4 @@ input[type=range] { accent-color: var(--acc); }
 #grip { position: fixed; right: 3px; bottom: 3px; width: 16px; height: 16px; cursor: nwse-resize; -webkit-app-region: no-drag; z-index: 9; background: linear-gradient(135deg, transparent 55%, var(--edge) 55%, var(--edge) 65%, transparent 65%, transparent 78%, var(--edge) 78%, var(--edge) 88%, transparent 88%); }
 .res { cursor: pointer; } .res:hover { background: #fff0c4; }
 .det { padding: 2px 0 6px 40px; border-bottom: 1px dashed var(--line); } .det .m { padding: 1px 0; }
+.faixa { padding: 0 0 4px 40px; font-size: 12px; } .sec { display: block; margin-top: 10px; }

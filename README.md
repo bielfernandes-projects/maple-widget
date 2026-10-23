@@ -15,8 +15,8 @@ It **only looks at the screen**: it doesn't touch the game, read its memory or i
 
 ## Download & use
 
-1. Open [**Releases**](../../releases/latest) and download **`Maple-Widget-0.1.2-win-x64.zip`**.
-2. Extract it and run **`Maple Widget 0.1.2.exe`**. It's portable: nothing gets installed.
+1. Open [**Releases**](../../releases/latest) and download **`Maple-Widget-0.1.3-win-x64.zip`**.
+2. Extract it and run **`Maple Widget 0.1.3.exe`**. It's portable: nothing gets installed.
 3. **Windows will warn you** ("Windows protected your PC") because the app isn't signed with a paid certificate. Click **More info → Run anyway**. The source code is in this repository so you can check it.
 4. Follow the setup wizard (below).
 
@@ -60,7 +60,7 @@ Drag the widget by its top bar and **resize** it from the bottom-right corner. P
 - **Privacy.** The game image stays in memory only and is never saved or sent. Network access is limited to meowdb/niadb (allowlist). Text from the network is shown as plain text.
 - **Windows SmartScreen.** The executable isn't signed, so the warning is expected. Download **only** from this repository's Releases page.
 - **Exclusive fullscreen doesn't work** (the capture comes out black). Use **windowed** or **borderless**.
-- **Resolution and DPI.** OCR was validated at **1366×768** and **1920×1080**. Other resolutions or Windows DPI scaling may need recalibration (**Detect scale** helps). Calibration is stored per resolution.
+- **Resolution and DPI.** Level, EXP and class are read at any of the game's windowed resolutions; confirmed live at **800×600** and on real screenshots at **1366×768** and **1920×1080** (1024×768 and 1280×720 should work but are less tested). The map name is matched against meowdb's list of maps, so OCR typos get fixed. Windows DPI scaling may need recalibration (**Detect scale** helps). Calibration is stored per resolution.
 - **OCR can be wrong.** Check the numbers the first time; if something looks off, recalibrate in **Sources → Recalibrate HUD**.
 - **First run** downloads the meowdb data (~200 monster pages and 3 indexes). It can take a few minutes; search already works with whatever has been downloaded.
 
@@ -123,8 +123,8 @@ Ele **só olha a tela**: não mexe no jogo, não lê a memória e não injeta na
 
 ## Baixar e usar
 
-1. Abra a página de [**Releases**](../../releases/latest) e baixe o arquivo **`Maple-Widget-0.1.2-win-x64.zip`**.
-2. Extraia o zip e abra **`Maple Widget 0.1.2.exe`**. É portátil: não instala nada.
+1. Abra a página de [**Releases**](../../releases/latest) e baixe o arquivo **`Maple-Widget-0.1.3-win-x64.zip`**.
+2. Extraia o zip e abra **`Maple Widget 0.1.3.exe`**. É portátil: não instala nada.
 3. **O Windows vai avisar** ("O Windows protegeu o computador"), porque o programa não tem assinatura digital paga. Clique em **Mais informações → Executar assim mesmo**. O código-fonte está neste repositório para você conferir.
 4. Siga o assistente de configuração (abaixo).
 
@@ -166,7 +166,7 @@ Dá para **arrastar** o widget pela barra de cima e **redimensionar** pelo canto
 - **Privacidade.** A imagem do jogo fica só na memória e nunca é salva nem enviada. A rede é usada apenas para meowdb/niadb (lista de permissão). Textos vindos da rede são exibidos como texto simples.
 - **Windows SmartScreen.** O executável não é assinado, então o aviso é esperado. Baixe **somente** pela página de Releases deste repositório.
 - **Tela cheia exclusiva não funciona** (a captura sai preta). Use **janela** ou **borderless**.
-- **Resolução e DPI.** O OCR foi validado em **1366×768** e **1920×1080**. Outras resoluções ou escala de DPI do Windows podem exigir recalibração (**Detectar escala** ajuda). A calibração é guardada por resolução.
+- **Resolução e DPI.** Level, EXP e classe são lidos em qualquer resolução em janela do jogo; confirmado ao vivo em **800×600** e em screenshots reais de **1366×768** e **1920×1080** (1024×768 e 1280×720 devem funcionar, mas foram menos testadas). O nome do mapa é casado com a lista de mapas do meowdb, o que corrige erros do OCR. Escala de DPI do Windows pode exigir recalibração (**Detectar escala** ajuda). A calibração é guardada por resolução.
 - **Leitura por OCR pode errar.** Confira os números na primeira vez; se algo estiver estranho, recalibre em **Fontes → Recalibrar HUD**.
 - **Primeira abertura:** baixa a base do meowdb (cerca de 200 páginas de monstros e 3 índices). Pode levar alguns minutos; a busca já funciona com o que foi baixado.
 

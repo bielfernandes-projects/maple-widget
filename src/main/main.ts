@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, screen, session, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { HudReader, DEFAULT_REGIONS, avisoSemCalibracao, quadroValeParaRegioes, regioesDoQuadro } from '../capture/hud';
+import { HudReader, DEFAULT_REGIONS, avisoSemCalibracao, larguraSuportada, quadroValeParaRegioes, regioesDoQuadro } from '../capture/hud';
 import { LeitorComCache } from '../capture/cached-reader';
 import { bgraToImg, decodeJpeg, isBlack, montarImg, toPngBuffer } from '../capture/image';
 import { escalasCandidatas, resizeImg } from '../capture/scale';
@@ -15,6 +15,7 @@ import { buildViewModel } from '../viewmodel';
 import { posicaoVisivel, validConsulta, validAddUrl, validEscala, validFolderPath, validFrame, validJanelaJogo, validOpenUrl, validQuestId, validRecortes, validRegions, validResKey } from './validate';
 import { espelharConsole, prepararLog } from './log';
 import { buscar, type Resultado } from '../search';
+import { acharMapa, indiceDeMapas, type Indice } from '../capture/mapname';
 import { syncDb } from '../sources/gamedb';
 import type { Estado, GameDb, Img, Library, SourceData, SyncInfo } from '../types';
 
@@ -40,7 +41,8 @@ let db: GameDb = { monstros: [], entradas: [] };
 let dbSincronizando = false;
 const tracker = createTrackerComTabela();
 let estado: Estado | null = null;
-let flags = { capturaPreta: false, jogoNaoEncontrado: false };
+let flags = { capturaPreta: false, jogoNaoEncontrado: false, hudIlegivel: false };
+let ultimoEstadoLog = '', idxMapas: Indice = [], idxN = -1;
 let syncInfo: Omit<SyncInfo, 'auto' | 'guias'> = { ultima: 0, offline: false };
 let busy = false;
 const SYNC_INTERVALO_MS = 30 * 60_000;
@@ -273,12 +275,18 @@ async function autoteste() {
 }
 
 // sequencial: HudReader.read não é seguro em paralelo
+// índice de nomes de mapas (base do meowdb + guias), refeito só quando a base muda
+function nomesDeMapas(): number {
+  const nomes = [...db.entradas.filter((e) => e.tipo === 'mapa').map((e) => e.nome), ...lib().maps.map((m) => m.name)];
+  if (nomes.length !== idxN) { idxN = nomes.length; idxMapas = indiceDeMapas(nomes); }
+  return idxMapas.length;
+}
 async function tick() {
   if (busy) return;
   busy = true;
   try {
     const q = await captureGame(), img = q?.img;
-    flags = { capturaPreta: false, jogoNaoEncontrado: !img };
+    flags = { capturaPreta: false, jogoNaoEncontrado: !img, hudIlegivel: false };
     // nativo montado com regiões antigas (calibração recém-salva): não lê zeros; os recortes novos já foram pedidos
     const velho = !!img && q?.regioes !== undefined && !quadroValeParaRegioes(q.regioes, cfg.regions, img.w, img.h);
     if (q && img && !velho) {
@@ -288,7 +296,12 @@ async function tick() {
         // ponytail: resizeImg percorre o quadro esparso inteiro (só quando há escala ≠ 1); reescalar só os recortes se pesar
         const key = resKey(img), esc = cfg.escalas[key];
         const r = await leitor.read(esc ? resizeImg(img, esc) : img, regioesDoQuadro(cfg.regions, img.w, img.h));
+        // fora de 1366/1920 o OCR do mapa erra sempre do mesmo jeito: só vale o que casa com um nome de mapa conhecido
+        if (r.map !== undefined) { nomesDeMapas(); r.map = acharMapa(r.map, idxMapas) ?? (larguraSuportada(img.w) ? r.map : undefined); }
         estado = tracker.push({ ...r, t: Date.now() });
+        flags.hudIlegivel = r.level === undefined || r.expAbs === undefined;
+        const st = `${img.w}x${img.h} lv=${r.level ?? '-'} exp=${r.expAbs ?? '-'} cls=${r.cls ?? '-'} mapa=${r.map ? 'ok' : '-'}`;
+        if (st !== ultimoEstadoLog) { ultimoEstadoLog = st; console.log('[leitura] ' + st); } // diagnóstico: só quando muda
       }
     }
     emit();
@@ -489,6 +502,7 @@ async function initReader() {
     const r = await Promise.race([criar, limite]).catch((e) => { criar.then((w) => void w.close(), () => {}); throw e; }).finally(() => clearTimeout(t));
     if (reader) { void r.close(); return; } // outra inicialização já venceu: descarta o worker extra
     reader = r;
+    reader.mapaEmQualquerLargura = true;
     leitor = new LeitorComCache(reader);
     ocrErro = '';
     console.log('[ocr] pronto' + (emb ? ' (modelo embutido)' : ''));
