@@ -31,3 +31,7 @@ input[type=text] { width: 100%; background: #0e1017; color: var(--fg); border: 1
 .foot { padding: 6px 10px; border-top: 1px solid var(--line); color: var(--mut); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .foot .opac { display: flex; align-items: center; gap: 6px; } .foot .keys { flex-basis: 100%; font-size: 11px; }
 .empty { color: var(--mut); padding: 12px 0; text-align: center; }
+.wlist { display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow-y: auto; margin: 6px 0; }
+.wlist button { text-align: left; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wlist button.on { border-color: var(--acc); color: var(--acc); background: #3a2f10; }
+.wlist button.on::before { content: "✓ "; }

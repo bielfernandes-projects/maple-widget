@@ -9,6 +9,7 @@ export interface Api {
   setAutoSync(on: boolean): Promise<void>;
   toggleQuest(id: string): Promise<void>;
   setExpanded(b: boolean): Promise<void>;
+  setCalibSize(): Promise<void>;
   setOpacity(n: number): Promise<void>;
   pickGameFolder(): Promise<string | null>;
   getShot(janelaJogo?: string, gamePath?: string): Promise<{ dataUrl: string; w: number; h: number; fuente: 'vivo' | 'arquivo'; nativa: boolean } | null>;

@@ -63,6 +63,7 @@ export function startWizard(onDone: () => void) {
   };
 
   const passo2 = async () => {
+    void window.api.setExpanded(true);
     const t = ++tok;
     const nomes = await window.api.listWindows();
     if (t !== tok) return;
@@ -77,11 +78,29 @@ export function startWizard(onDone: () => void) {
     show(body(el('h4', undefined, `Passo 2/${TOTAL} · Janela do jogo`),
       el('div', 'm', nomes.length ? 'Escolha a janela do MapleStory (ou detecte automaticamente).' : 'Nenhuma janela encontrada. Abra o jogo ou use a detecção automática.'),
       lista,
+      el('div', 'm', 'Não vê o MapleStory na lista? Ele não aparece se estiver minimizado: restaure a janela do jogo e clique em Atualizar lista.'),
+      btn('Atualizar lista', passo2),
       btn('Próximo: calibrar HUD', () => { janela = sel; return passo3(); }),
       btn('Voltar', passo1)));
   };
 
-  const passo3 = async () => {
+  // O jogo minimiza ao perder o foco: a imagem é tirada após uma contagem, com o jogo à frente.
+  const passo3 = () => {
+    void window.api.setExpanded(true);
+    const t = ++tok;
+    const msg = el('div', 'm');
+    show(body(el('h4', undefined, `Passo 3/${TOTAL} · Calibrar HUD`),
+      el('div', 'm', 'Deixe o MapleStory visível, na tela do personagem (restaure-o se estiver minimizado). Ao clicar em Capturar, você terá 5 s para clicar na janela do jogo; a imagem é tirada no fim da contagem.'),
+      msg,
+      btn('Capturar em 5 s', async () => {
+        for (let i = 5; i > 0; i--) { msg.textContent = `Capturando em ${i}…`; await new Promise((r) => setTimeout(r, 1000)); if (t !== tok) return; }
+        await calibrar();
+      }),
+      btn('Voltar', passo2), btn('Pular calibração', async () => passo4())));
+  };
+
+  const calibrar = async () => {
+    void window.api.setCalibSize();
     const t = ++tok;
     const msg = el('div', 'm', 'Capturando…');
     const caixa = body(el('h4', undefined, `Passo 3/${TOTAL} · Calibrar HUD`), msg);
@@ -89,7 +108,7 @@ export function startWizard(onDone: () => void) {
     const shot = await window.api.getShot(janela, gamePath);
     if (t !== tok) return;
     if (!shot) {
-      msg.textContent = 'Não consegui obter uma imagem do jogo. Abra o jogo (modo janela/borderless) ou tire um screenshot no jogo e tente de novo.';
+      msg.textContent = 'Não consegui obter uma imagem do jogo. Ele pode estar minimizado: deixe-o visível (modo janela/borderless) e tente de novo.';
       caixa.append(btn('Tentar de novo', passo3), btn('Voltar', passo2), btn('Pular calibração', async () => passo4()));
       atualizar();
       return;
@@ -101,7 +120,7 @@ export function startWizard(onDone: () => void) {
     const feitas: Region[] = [];
     let drag: { x: number; y: number } | null = null;
     let cur: Region | null = null;
-    cv.style.width = '316px'; cv.style.border = '1px solid #2c3040'; cv.style.cursor = 'crosshair';
+    cv.style.width = '100%'; cv.style.display = 'block'; cv.style.userSelect = 'none'; cv.style.border = '1px solid #2c3040'; cv.style.cursor = 'crosshair';
     const say = () => (info.textContent = `Passo 3/${TOTAL} · Arraste um retângulo sobre ${ORDEM[feitas.length].nome}.`);
     const paint = () => {
       ctx.drawImage(img, 0, 0);
@@ -134,6 +153,7 @@ export function startWizard(onDone: () => void) {
       drag = null; cur = null; paint();
     };
     cv.onmousedown = (e) => {
+      e.preventDefault(); // sem seleção de texto/arrasto nativo durante o retângulo
       drag = pos(e);
       window.addEventListener('mousemove', move); window.addEventListener('mouseup', soltar);
       document.addEventListener('mouseleave', cancelar);
@@ -158,7 +178,7 @@ export function startWizard(onDone: () => void) {
   };
 
   const passo4 = () => {
-    ++tok;
+    ++tok; void window.api.setExpanded(true);
     const msg = el('div', 'm');
     show(body(el('h4', undefined, `Passo 4/${TOTAL} · Guias`),
       el('div', 'm', 'Todos os guias do MapleStory Classic no meowdb entram automaticamente e se mantêm atualizados. Links extras podem ser colados depois, na aba Fontes.'),

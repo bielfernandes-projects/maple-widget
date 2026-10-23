@@ -348,6 +348,12 @@ function registerIpc() {
   });
   handle<void>('app:quit', undefined, () => sair()); // sem argumentos
   handle<void>('win:expand', undefined, (b) => { applySize(!!b); store.save(cfg); });
+  // calibração: janela grande (cabe na área útil da tela) para o screenshot ficar legível; não persiste o tamanho
+  handle<void>('win:calib', undefined, () => {
+    const a = screen.getDisplayMatching(win.getBounds()).workArea;
+    const w = Math.min(1000, a.width - 20), h = Math.min(780, a.height - 20);
+    win.setBounds({ x: a.x + Math.round((a.width - w) / 2), y: a.y + Math.round((a.height - h) / 2), width: w, height: h });
+  });
   handle<void>('win:opacity', undefined, (n) => {
     if (typeof n !== 'number' || !Number.isFinite(n)) return;
     cfg.opacidade = Math.min(1, Math.max(0.3, n)); win.setOpacity(cfg.opacidade); scheduleSave();

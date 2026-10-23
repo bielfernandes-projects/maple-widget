@@ -11,6 +11,7 @@ const api: Api = {
   setAutoSync: (on) => ipcRenderer.invoke('sync:toggle', on),
   toggleQuest: (id) => ipcRenderer.invoke('quest:toggle', id),
   setExpanded: (b) => ipcRenderer.invoke('win:expand', b),
+  setCalibSize: () => ipcRenderer.invoke('win:calib'),
   setOpacity: (n) => ipcRenderer.invoke('win:opacity', n),
   pickGameFolder: () => ipcRenderer.invoke('wiz:folder'),
   getShot: (j, p) => ipcRenderer.invoke('wiz:shot', j, p),
