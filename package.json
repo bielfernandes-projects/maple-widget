@@ -27,7 +27,8 @@
     "win": {
       "target": [
         "portable"
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "directories": {
       "output": "release"
